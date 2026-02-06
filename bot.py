@@ -549,9 +549,16 @@ def callback_handler(callback):
 # ================ ЗАПУСК ================
 
 def run_flask_server():
-    port = int(os.environ.get('PORT', 10000))
-    print(f"🚀 Flask сервер запущен на порту {port}")
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    try:
+        port = int(os.environ.get('PORT', 10000))
+        print(f"🚀 =========================================")
+        print(f"🚀 Flask сервер запускается на порту: {port}")
+        print(f"🚀 =========================================")
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False, threaded=True)
+    except Exception as e:
+        print(f"❌ Ошибка Flask: {e}")
+        # Запускаем бота даже если Flask упал
+        return
 
 def run_telegram_bot():
     print("🤖 Telegram бот запущен!")
@@ -560,13 +567,19 @@ def run_telegram_bot():
     bot.polling(none_stop=True, interval=1, timeout=60)
 
 if __name__ == "__main__":
-    # Запускаем Flask в отдельном потоке
+    print("🎬 ===== НАЧАЛО ЗАПУСКА =====")
+    
+    # Запускаем Flask
+    print("1. Запуск Flask сервера...")
     flask_thread = threading.Thread(target=run_flask_server)
     flask_thread.daemon = True
     flask_thread.start()
     
-    # Ждем немного чтобы Flask успел запуститься
-    time.sleep(2)
+    # Ждем
+    print("2. Ожидание запуска Flask (4 секунды)...")
+    time.sleep(4)
     
-    # Запускаем Telegram бота
+    # Запускаем бота
+    print("3. Запуск Telegram бота...")
     run_telegram_bot()
+
