@@ -2,13 +2,12 @@ import telebot
 from telebot import types
 from datetime import datetime, timedelta
 import requests
-import os
-import time
-import threading
-from flask import Flask
-from collections import OrderedDict
+import os  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+import time  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+import threading  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+from flask import Flask  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
 
-# ================ Flask для Render ================
+# Flask приложение для Render
 app = Flask(__name__)
 
 @app.route('/')
@@ -22,85 +21,38 @@ def ping():
 @app.route('/health')
 def health():
     return "OK", 200
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)    
+    
 
-# ================ НАСТРОЙКИ БОТА ================
-BOT_TOKEN = "8036446753:AAHFkS2ntHfOFDIHJvrmEz9CHpeLCAZCJ1M"
+# === ИСПРАВЬТЕ ТОКЕН БОТА ЗДЕСЬ ===
+# Для теста можно оставить ваш, но лучше создать нового бота
+BOT_TOKEN = "8036446753:AAHFkS2ntHfOFDIHJvrmEz9CHpeLCAZCJ1M"  # <-- ПРОВЕРЬТЕ ЭТОТ ТОКЕН!
 bot = telebot.TeleBot(BOT_TOKEN)
+# ===================================
 
 # Дата начала весеннего семестра 2025-2026
-START_DATE = datetime(2026, 2, 9)
+START_DATE = datetime(2026, 2, 9)  # 9 февраля 2026 года
 
-# ================ КРАСИВОЕ ОФОРМЛЕНИЕ ================
-# Эмодзи и стили
-EMOJIS = {
-    "week": "📆",
-    "today": "📅",
-    "tomorrow": "📆",
-    "back": "🔙",
-    "home": "🏠",
-    "refresh": "🔄",
-    "info": "ℹ️",
-    "help": "❓",
-    "menu": "📋",
-    "success": "✅",
-    "error": "❌",
-    "warning": "⚠️",
-    "clock": "⏰",
-    "bell": "🔔",
-    "book": "📚",
-    "computer": "💻",
-    "math": "🧮",
-    "physics": "⚛️",
-    "language": "🔤",
-    "sport": "⚽",
-    "history": "🏛️",
-    "free": "🎯",
-    "pin": "📍",
-    "university": "🎓"
-}
 
-# Функция для красивого форматирования
-def format_schedule(day_name, week_type, schedule_text):
-    """Форматирует расписание с красивым оформлением"""
-    # Добавляем заголовок с эмодзи
-    header = f"{EMOJIS['week']} *{day_name.upper()} | {week_type} НЕДЕЛЯ*\n"
-    header += "═" * 35 + "\n\n"
-    
-    # Обрабатываем каждую строку расписания
-    lines = schedule_text.split('\n')
-    formatted_lines = []
-    
-    for line in lines:
-        if line.strip():
-            # Добавляем эмодзи для пар
-            if "пара (" in line:
-                line = f"{EMOJIS['clock']} {line}"
-            # Добавляем эмодзи для предметов
-            elif "•" in line:
-                if "Алгоритмы" in line or "программирования" in line:
-                    line = line.replace("•", f"{EMOJIS['computer']}")
-                elif "Физика" in line:
-                    line = line.replace("•", f"{EMOJIS['physics']}")
-                elif "Математический" in line:
-                    line = line.replace("•", f"{EMOJIS['math']}")
-                elif "Немецкий" in line or "Английский" in line:
-                    line = line.replace("•", f"{EMOJIS['language']}")
-                elif "История" in line or "Политология" in line:
-                    line = line.replace("•", f"{EMOJIS['history']}")
-                elif "Физическая" in line:
-                    line = line.replace("•", f"{EMOJIS['sport']}")
-                elif "Свободно" in line:
-                    line = line.replace("• Свободно", f"{EMOJIS['free']} *СВОБОДНО*")
-                else:
-                    line = line.replace("•", f"{EMOJIS['book']}")
-            formatted_lines.append(line)
-    
-    return header + '\n'.join(formatted_lines)
+# Функция определения текущей недели
+def get_current_week():
+    today = datetime.now()
+    if today < START_DATE:
+        return "I"
 
-# ================ РАСПИСАНИЕ ================
-schedule = OrderedDict([
-    ("Понедельник", {
-        "I": """*1 пара (08:00-09:25):*
+    days_diff = (today - START_DATE).days
+    week_num = (days_diff // 7) % 2
+    return "I" if week_num == 0 else "II"
+
+
+# Расписание для вашей группы
+schedule = {
+    "Понедельник": {
+        "I": """📅 *ПОНЕДЕЛЬНИК | I неделя*
+
+*1 пара (08:00-09:25):*
 • Алгоритмы и структуры данных (лр 110а-1)
 
 *2 пара (09:35-11:00):*
@@ -112,7 +64,9 @@ schedule = OrderedDict([
 *Вторая половина дня:*
 • Свободно""",
 
-        "II": """*1 пара (08:00-09:25):*
+        "II": """📅 *ПОНЕДЕЛЬНИК | II неделя*
+
+*1 пара (08:00-09:25):*
 • Свободно
 
 *2 пара (09:35-11:00):*
@@ -123,10 +77,12 @@ schedule = OrderedDict([
 
 *4 пара (13:00-14:25):*
 • Свободно"""
-    }),
+    },
 
-    ("Вторник", {
-        "I": """*1 пара (08:00-09:25):*
+    "Вторник": {
+        "I": """📅 *ВТОРНИК | I неделя*
+
+*1 пара (08:00-09:25):*
 • Математический анализ (пз 110-4)
 
 *2 пара (09:35-11:00):*
@@ -138,7 +94,9 @@ schedule = OrderedDict([
 *4 пара (13:00-14:25):*
 • Немецкий язык (пз 239-2 общ.)""",
 
-        "II": """*1 пара (08:00-09:25):*
+        "II": """📅 *ВТОРНИК | II неделя*
+
+*1 пара (08:00-09:25):*
 • Математический анализ (пз 110-4)
 
 *2 пара (09:35-11:00):*
@@ -149,10 +107,12 @@ schedule = OrderedDict([
 
 *4 пара (13:00-14:25):*
 • Немецкий язык (пз 239-2 общ.)"""
-    }),
+    },
 
-    ("Среда", {
-        "I": """*1 пара (08:00-09:25):*
+    "Среда": {
+        "I": """📅 *СРЕДА | I неделя*
+
+*1 пара (08:00-09:25):*
 • Политология (пз 334-4) - с 18.03
 
 *2 пара (09:35-11:00):*
@@ -165,7 +125,9 @@ schedule = OrderedDict([
 *4 пара (13:00-14:25):*
 • Физическая культура""",
 
-        "II": """*1 пара (08:00-09:25):*
+        "II": """📅 *СРЕДА | II неделя*
+
+*1 пара (08:00-09:25):*
 • История мировой культуры (пз 149-4)
 
 *2 пара (09:35-11:00):*
@@ -177,10 +139,12 @@ schedule = OrderedDict([
 
 *4 пара (13:00-14:25):*
 • Физическая культура"""
-    }),
+    },
 
-    ("Четверг", {
-        "I": """*1 пара (08:00-09:25):*
+    "Четверг": {
+        "I": """📅 *ЧЕТВЕРГ | I неделя*
+
+*1 пара (08:00-09:25):*
 • История белорусской государственности (лк 301-4, доц. Коваль О.В.)
 
 *2 пара (09:35-11:00):*
@@ -192,7 +156,9 @@ schedule = OrderedDict([
 *4 пара (13:00-14:25):*
 • Свободно""",
 
-        "II": """*1 пара (08:00-09:25):*
+        "II": """📅 *ЧЕТВЕРГ | II неделя*
+
+*1 пара (08:00-09:25):*
 • История белорусской государственности (лк 301-4, доц. Коваль О.В.)
 
 *2 пара (09:35-11:00):*
@@ -203,10 +169,12 @@ schedule = OrderedDict([
 
 *4 пара (13:00-14:25):*
 • Свободно"""
-    }),
+    },
 
-    ("Пятница", {
-        "I": """*1 пара (08:00-09:25):*
+    "Пятница": {
+        "I": """📅 *ПЯТНИЦА | I неделя*
+
+*1 пара (08:00-09:25):*
 • Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)
 
 *2 пара (09:35-11:00):*
@@ -218,7 +186,9 @@ schedule = OrderedDict([
 *4 пара (13:00-14:25):*
 • История белорусской государственности (пз 331-4)""",
 
-        "II": """*1 пара (08:00-09:25):*
+        "II": """📅 *ПЯТНИЦА | II неделя*
+
+*1 пара (08:00-09:25):*
 • Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)
 
 *2 пара (09:35-11:00):*
@@ -229,10 +199,12 @@ schedule = OrderedDict([
 
 *4 пара (13:00-14:25):*
 • История белорусской государственности (пз 331-4)"""
-    }),
+    },
 
-    ("Суббота", {
-        "I": """*1 пара (08:00-09:25):*
+    "Суббота": {
+        "I": """📅 *СУББОТА | I неделя*
+
+*1 пара (08:00-09:25):*
 • Физика (пз 110-4)
 
 *2 пара (09:35-11:00):*
@@ -244,7 +216,9 @@ schedule = OrderedDict([
 *4 пара (13:00-14:25):*
 • Английский язык (пз 233-2 общ.)""",
 
-        "II": """*1 пара (08:00-09:25):*
+        "II": """📅 *СУББОТА | II неделя*
+
+*1 пара (08:00-09:25):*
 • Свободно
 
 *2 пара (09:35-11:00):*
@@ -255,500 +229,397 @@ schedule = OrderedDict([
 
 *4 пара (13:00-14:25):*
 • Английский язык (пз 233-2 общ.)"""
-    })
-])
+    }
+}
 
-# ================ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ================
-def get_current_week():
-    """Определяет текущую неделю (I или II)"""
-    today = datetime.now()
-    if today < START_DATE:
-        return "I"
-    
-    days_diff = (today - START_DATE).days
-    week_num = (days_diff // 7) % 2
-    return "I" if week_num == 0 else "II"
 
-def create_main_menu():
-    """Создает главное меню с красивыми кнопками"""
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    
-    # Дни недели с эмодзи
-    days_buttons = [
-        types.KeyboardButton(f'📅 Понедельник'),
-        types.KeyboardButton(f'📅 Вторник'),
-        types.KeyboardButton(f'📅 Среда'),
-        types.KeyboardButton(f'📅 Четверг'),
-        types.KeyboardButton(f'📅 Пятница'),
-        types.KeyboardButton(f'📅 Суббота')
-    ]
-    
-    # Располагаем дни недели
-    for i in range(0, len(days_buttons), 2):
-        if i + 1 < len(days_buttons):
-            markup.row(days_buttons[i], days_buttons[i + 1])
-        else:
-            markup.row(days_buttons[i])
-    
-    # Основные функции
-    markup.row(
-        types.KeyboardButton(f'{EMOJIS["today"]} Сегодня'),
-        types.KeyboardButton(f'{EMOJIS["tomorrow"]} Завтра')
-    )
-    
-    # Дополнительные функции
-    markup.row(
-        types.KeyboardButton(f'{EMOJIS["info"]} Какая неделя?'),
-        types.KeyboardButton(f'{EMOJIS["refresh"]} Сменить неделю')
-    )
-    
-    markup.row(types.KeyboardButton(f'{EMOJIS["help"]} Помощь'))
-    
-    return markup
-
-def create_week_switch_menu():
-    """Создает меню для смены недели"""
-    current_week = get_current_week()
-    other_week = "II" if current_week == "I" else "I"
-    
-    markup_inline = types.InlineKeyboardMarkup(row_width=1)
-    
-    # Создаем кнопки для каждого дня с другой неделей
-    days = list(schedule.keys())
-    for day in days:
-        btn = types.InlineKeyboardButton(
-            f'📅 {day} ({other_week} неделя)',
-            callback_data=f'week_switch_{other_week}_{day}'
-        )
-        markup_inline.add(btn)
-    
-    # Кнопка возврата
-    markup_inline.add(types.InlineKeyboardButton(
-        f'{EMOJIS["back"]} Назад',
-        callback_data='back_to_menu'
-    ))
-    
-    return markup_inline, other_week
-
-def create_schedule_buttons(day_name, current_week):
-    """Создает inline-кнопки под расписанием"""
-    markup_inline = types.InlineKeyboardMarkup(row_width=2)
-    
-    other_week = "II" if current_week == "I" else "I"
-    
-    # Основные кнопки
-    btn_other_week = types.InlineKeyboardButton(
-        f'{EMOJIS["refresh"]} {other_week} неделя',
-        callback_data=f'schedule_{other_week}_{day_name}'
-    )
-    
-    btn_current = types.InlineKeyboardButton(
-        f'{EMOJIS["success"]} {current_week} неделя',
-        callback_data='current_week'
-    )
-    
-    btn_today = types.InlineKeyboardButton(
-        f'{EMOJIS["today"]} Сегодня',
-        callback_data='show_today'
-    )
-    
-    btn_tomorrow = types.InlineKeyboardButton(
-        f'{EMOJIS["tomorrow"]} Завтра',
-        callback_data='show_tomorrow'
-    )
-    
-    btn_menu = types.InlineKeyboardButton(
-        f'{EMOJIS["home"]} Меню',
-        callback_data='back_to_menu'
-    )
-    
-    # Располагаем кнопки
-    markup_inline.row(btn_other_week, btn_current)
-    markup_inline.row(btn_today, btn_tomorrow)
-    markup_inline.row(btn_menu)
-    
-    return markup_inline
-
-# ================ ОБРАБОТЧИКИ КОМАНД ================
 @bot.message_handler(commands=['start'])
 def start(message):
-    """Обработчик команды /start"""
     current_week = get_current_week()
     today = datetime.now()
-    
-    # Красивое приветственное сообщение
-    week_num = (today - START_DATE).days // 7 + 1 if today >= START_DATE else 0
-    
-    welcome_msg = f"""
-{EMOJIS["university"]} *БОТ-РАСПИСАНИЕ БГТУ*
-══════════════════════════════
 
-{EMOJIS["pin"]} *Начало семестра:* 09.02.2026
-{EMOJIS["week"]} *Текущая неделя:* {current_week}
-{EMOJIS["calendar"]} *Учебная неделя №:* {week_num}
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
 
-{EMOJIS["today"]} *{today.strftime('%d.%m.%Y')}* 
-📌 *{['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][today.weekday()]}*
+    # Кнопки дней недели
+    days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
+    buttons = [types.KeyboardButton(day) for day in days]
 
-══════════════════════════════
-*Выберите день недели:*
-"""
-    
-    bot.send_message(
-        message.chat.id, 
-        welcome_msg,
-        reply_markup=create_main_menu(),
-        parse_mode='Markdown'
+    # Располагаем по 2 кнопки в ряд
+    for i in range(0, len(buttons), 2):
+        if i + 1 < len(buttons):
+            markup.row(buttons[i], buttons[i + 1])
+        else:
+            markup.row(buttons[i])
+
+    # Дополнительные кнопки
+    markup.row(
+        types.KeyboardButton('📅 Сегодня'),
+        types.KeyboardButton('📆 Завтра')
     )
+    markup.row(
+        types.KeyboardButton('ℹ️ Какая неделя?'),
+        types.KeyboardButton('🔄 Сменить неделю')
+    )
+    markup.row(types.KeyboardButton('/help'))
+
+    # Приветственное сообщение
+    week_num = (today - START_DATE).days // 7 + 1 if today >= START_DATE else 0
+    welcome_msg = f"""
+🎓 *Расписание БГТУ*
+*Семестр начинается:* 09.02.2026
+*Текущая неделя:* {current_week} неделя
+*С начала семестра:* {week_num} учебная неделя
+
+📅 *{today.strftime('%d.%m.%Y')}* ({['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][today.weekday()]})
+
+Выберите день недели:
+"""
+
+    bot.send_message(message.chat.id, welcome_msg,
+                     reply_markup=markup, parse_mode='Markdown')
+
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
-    """Обработчик команды /help"""
-    help_text = f"""
-{EMOJIS["help"]} *ПОМОЩЬ ПО БОТУ*
-══════════════════════════════
+    help_text = """
+📚 *Помощь по боту:*
 
-{EMOJIS["book"]} *Основные команды:*
+*Основные команды:*
 /start - Главное меню
 /today - Расписание на сегодня
 /tomorrow - Расписание на завтра
-/week - Какая сейчас неделя
+/week - Какая сейчас неделя (I/II)
 /help - Эта справка
 
-{EMOJIS["bell"]} *Как пользоваться:*
-1. Выберите день недели из меню
-2. Используйте кнопки под расписанием для переключения недель
-3. Для быстрого доступа используйте кнопки "Сегодня" и "Завтра"
+*Как пользоваться:*
+1. Нажмите на кнопку с днем недели
+2. Бот покажет расписание для этого дня
+3. Используйте inline-кнопки под расписанием для переключения между неделями
 
-{EMOJIS["info"]} *Особенности:*
-• Бот автоматически определяет I/II неделю
+*Информация:*
+• Бот автоматически определяет I или II неделя
 • Даты начала семестра: 09.02.2026
 • Если пара не указана - время свободно
-
-{EMOJIS["pin"]} *Поддержка:*
-При проблемах работы бота пишите разработчику
 """
     bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
 
+
 @bot.message_handler(commands=['today'])
 def today_command(message):
-    """Показать расписание на сегодня"""
     show_day_schedule(message, "today")
+
 
 @bot.message_handler(commands=['tomorrow'])
 def tomorrow_command(message):
-    """Показать расписание на завтра"""
     show_day_schedule(message, "tomorrow")
+
 
 @bot.message_handler(commands=['week'])
 def week_command(message):
-    """Показать информацию о неделе"""
     current_week = get_current_week()
     today = datetime.now()
     week_num = (today - START_DATE).days // 7 + 1 if today >= START_DATE else 0
-    
+
     week_info = f"""
-{EMOJIS["week"]} *ИНФОРМАЦИЯ О НЕДЕЛЕ*
-══════════════════════════════
+📆 *Информация о неделе:*
 
-{EMOJIS["success"]} *Текущая неделя:* {current_week}
-{EMOJIS["calendar"]} *Учебная неделя №:* {week_num}
-{EMOJIS["today"]} *Дата:* {today.strftime('%d.%m.%Y')}
+*Текущая неделя:* {current_week}
+*Учебная неделя №:* {week_num}
+*Дата:* {today.strftime('%d.%m.%Y')}
 
-{EMOJIS["pin"]} *Начало семестра:* 09.02.2026
-{EMOJIS["clock"]} *Прошло дней:* {(today - START_DATE).days if today >= START_DATE else 0}
-
-{EMOJIS["info"]} *Следующая неделя:* {"I" if current_week == "II" else "II"}
+*Начало семестра:* 09.02.2026
+*Прошло дней:* {(today - START_DATE).days if today >= START_DATE else 0}
 """
     bot.send_message(message.chat.id, week_info, parse_mode='Markdown')
 
-# ================ ОБРАБОТЧИКИ ТЕКСТОВЫХ СООБЩЕНИЙ ================
+
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
-    """Обработка текстовых сообщений"""
-    text = message.text
-    
-    if 'Понедельник' in text:
-        show_day_with_buttons(message, 'Понедельник')
-    elif 'Вторник' in text:
-        show_day_with_buttons(message, 'Вторник')
-    elif 'Среда' in text:
-        show_day_with_buttons(message, 'Среда')
-    elif 'Четверг' in text:
-        show_day_with_buttons(message, 'Четверг')
-    elif 'Пятница' in text:
-        show_day_with_buttons(message, 'Пятница')
-    elif 'Суббота' in text:
-        show_day_with_buttons(message, 'Суббота')
-    elif f'{EMOJIS["today"]} Сегодня' == text:
+    if message.text == '📅 Сегодня':
         show_day_schedule(message, "today")
-    elif f'{EMOJIS["tomorrow"]} Завтра' == text:
+    elif message.text == '📆 Завтра':
         show_day_schedule(message, "tomorrow")
-    elif f'{EMOJIS["info"]} Какая неделя?' == text:
+    elif message.text == 'ℹ️ Какая неделя?':
         week_command(message)
-    elif f'{EMOJIS["refresh"]} Сменить неделю' == text:
-        show_week_switch_menu_handler(message)
-    elif f'{EMOJIS["help"]} Помощь' in text:
-        help_command(message)
+    elif message.text == '🔄 Сменить неделю':
+        show_week_switch_menu(message)
+    elif message.text in schedule:
+        show_day_with_week_buttons(message, message.text)
     else:
-        bot.send_message(
-            message.chat.id,
-            f"{EMOJIS['warning']} Пожалуйста, используйте меню ниже 👇",
-            reply_markup=create_main_menu()
-        )
+        bot.send_message(message.chat.id,
+                         "Пожалуйста, выберите день недели из меню ниже 👇")
 
-# ================ ФУНКЦИИ ПОКАЗА РАСПИСАНИЯ ================
+
 def show_day_schedule(message, day_type):
-    """Показывает расписание на сегодня или завтра"""
-    days = list(schedule.keys())
+    days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
     today = datetime.now().weekday()
-    
+
     if day_type == "today":
         if today < 6:
             day_name = days[today]
-            date_prefix = f"{EMOJIS['today']} *СЕГОДНЯ ({day_name})*"
+            prefix = f"📅 *СЕГОДНЯ ({day_name})*"
         else:
-            bot.send_message(
-                message.chat.id,
-                f"{EMOJIS['free']} *ВОСКРЕСЕНЬЕ - ВЫХОДНОЙ!*\n\nОтдыхайте и готовьтесь к новой неделе! {EMOJIS['success']}"
-            )
+            bot.send_message(message.chat.id,
+                             "Сегодня воскресенье - выходной день! 🎉\nОтдыхайте и готовьтесь к новой неделе!")
             return
     else:  # tomorrow
         tomorrow = (today + 1) % 7
         if tomorrow < 6:
             day_name = days[tomorrow]
             tomorrow_date = datetime.now() + timedelta(days=1)
-            date_prefix = f"{EMOJIS['tomorrow']} *ЗАВТРА ({day_name}, {tomorrow_date.strftime('%d.%m')})*"
+            prefix = f"📆 *ЗАВТРА ({day_name}, {tomorrow_date.strftime('%d.%m')})*"
         else:
-            bot.send_message(
-                message.chat.id,
-                f"{EMOJIS['free']} *ЗАВТРА ВОСКРЕСЕНЬЕ - ВЫХОДНОЙ!*\n\nОтдыхайте! {EMOJIS['success']}"
-            )
+            bot.send_message(message.chat.id,
+                             "Завтра воскресенье - выходной день! 🎉")
             return
-    
-    show_day_with_buttons(message, day_name, date_prefix)
 
-def show_day_with_buttons(message, day_name, prefix=""):
-    """Показывает расписание с кнопками"""
+    show_day_with_week_buttons(message, day_name, prefix)
+
+
+def show_day_with_week_buttons(message, day_name, prefix=""):
     current_week = get_current_week()
-    
+
     if day_name in schedule and current_week in schedule[day_name]:
-        # Форматируем расписание
-        formatted_schedule = format_schedule(
-            day_name, 
-            current_week, 
-            schedule[day_name][current_week]
-        )
-        
-        # Добавляем префикс если есть
-        if prefix:
-            response = f"{prefix}\n══════════════════════════════\n{formatted_schedule}"
-        else:
-            response = formatted_schedule
-        
+        response = f"{prefix}\n\n"
+        response += schedule[day_name][current_week]
+
         # Отправляем расписание
-        msg = bot.send_message(
-            message.chat.id,
-            response,
-            parse_mode='Markdown'
+        bot.send_message(message.chat.id, response, parse_mode='Markdown')
+
+        # Создаем inline-кнопки
+        markup_inline = types.InlineKeyboardMarkup(row_width=2)
+
+        # Определяем какую неделю показывать для переключения
+        other_week = "II" if current_week == "I" else "I"
+
+        btn_other_week = types.InlineKeyboardButton(
+            f'📖 {other_week} неделя',
+            callback_data=f'week_{other_week}_{day_name}'
         )
-        
-        # Отправляем кнопки управления
+        btn_current = types.InlineKeyboardButton(
+            f'✅ {current_week} неделя',
+            callback_data='current'
+        )
+        btn_today = types.InlineKeyboardButton(
+            '📅 Сегодня',
+            callback_data='show_today'
+        )
+        btn_menu = types.InlineKeyboardButton(
+            '🏠 Меню',
+            callback_data='back_to_menu'
+        )
+
+        markup_inline.row(btn_other_week)
+        markup_inline.row(btn_today, btn_menu)
+
         bot.send_message(
             message.chat.id,
-            f"{EMOJIS['info']} *Управление расписанием:*",
-            reply_markup=create_schedule_buttons(day_name, current_week),
+            f"*Сейчас отображается {current_week} неделя*",
+            reply_markup=markup_inline,
             parse_mode='Markdown'
         )
     else:
-        bot.send_message(
-            message.chat.id,
-            f"{EMOJIS['error']} Расписание на {day_name} не найдено"
-        )
+        bot.send_message(message.chat.id,
+                         f"Расписание на {day_name} не найдено")
 
-def show_week_switch_menu_handler(message):
-    """Обработчик кнопки 'Сменить неделю'"""
-    markup_inline, other_week = create_week_switch_menu()
-    
+
+def show_week_switch_menu(message):
+    current_week = get_current_week()
+    other_week = "II" if current_week == "I" else "I"
+
+    markup_inline = types.InlineKeyboardMarkup()
+
+    days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
+    for day in days:
+        btn = types.InlineKeyboardButton(
+            f'{day} ({other_week} нед.)',
+            callback_data=f'week_{other_week}_{day}'
+        )
+        markup_inline.row(btn)
+
+    btn_back = types.InlineKeyboardButton('🔙 Назад', callback_data='back_to_menu')
+    markup_inline.row(btn_back)
+
     bot.send_message(
         message.chat.id,
-        f"{EMOJIS['refresh']} *ВЫБЕРИТЕ ДЕНЬ ДЛЯ ПРОСМОТРА {other_week} НЕДЕЛИ:*",
+        f"*Выберите день для просмотра {other_week} недели:*",
         reply_markup=markup_inline,
         parse_mode='Markdown'
     )
 
-# ================ ОБРАБОТЧИКИ CALLBACK ================
+
 @bot.callback_query_handler(func=lambda callback: True)
 def callback_handler(callback):
-    """Обработчик inline-кнопок"""
-    data = callback.data
-    
-    try:
-        if data.startswith('schedule_') or data.startswith('week_switch_'):
-            # Разбираем данные
-            parts = data.split('_')
-            week_type = parts[1]  # I или II
-            day_name = '_'.join(parts[2:])  # День недели
-            
-            if day_name in schedule and week_type in schedule[day_name]:
-                # Форматируем расписание
-                formatted_schedule = format_schedule(
-                    day_name,
-                    week_type,
-                    schedule[day_name][week_type]
+    if callback.data.startswith('week_I_'):
+        day_name = callback.data.split('_')[2]
+        if day_name in schedule and "I" in schedule[day_name]:
+            # Редактируем сообщение с расписанием
+            try:
+                bot.edit_message_text(
+                    schedule[day_name]["I"],
+                    callback.message.chat.id,
+                    callback.message.message_id - 1
                 )
-                
-                # Определяем заголовок
-                if data.startswith('week_switch_'):
-                    header = f"{EMOJIS['refresh']} *{day_name.upper()} | {week_type} НЕДЕЛЯ*"
-                else:
-                    current_day = datetime.now().strftime('%A')
-                    if day_name.lower() == current_day.lower():
-                        header = f"{EMOJIS['today']} *{day_name.upper()} | {week_type} НЕДЕЛЯ*"
-                    else:
-                        header = f"{EMOJIS['week']} *{day_name.upper()} | {week_type} НЕДЕЛЯ*"
-                
-                response = f"{header}\n══════════════════════════════\n{formatted_schedule}"
-                
-                # Обновляем сообщение с расписанием
-                try:
-                    bot.edit_message_text(
-                        response,
-                        callback.message.chat.id,
-                        callback.message.message_id - 1,
-                        parse_mode='Markdown'
-                    )
-                    
-                    # Обновляем кнопки
-                    new_markup = create_schedule_buttons(day_name, week_type)
-                    bot.edit_message_reply_markup(
-                        callback.message.chat.id,
-                        callback.message.message_id,
-                        reply_markup=new_markup
-                    )
-                    
-                    bot.answer_callback_query(
-                        callback.id,
-                        f"Показана {week_type} неделя"
-                    )
-                except Exception as e:
-                    # Если не удалось отредактировать, отправляем новое сообщение
-                    bot.send_message(
-                        callback.message.chat.id,
-                        response,
-                        parse_mode='Markdown'
-                    )
-                    bot.send_message(
-                        callback.message.chat.id,
-                        f"{EMOJIS['info']} *Управление расписанием:*",
-                        reply_markup=create_schedule_buttons(day_name, week_type),
-                        parse_mode='Markdown'
-                    )
-                    bot.answer_callback_query(callback.id)
-            
-        elif data == 'back_to_menu':
-            # Удаляем сообщение с кнопками
-            try:
-                bot.delete_message(callback.message.chat.id, callback.message.message_id)
-            except:
-                pass
-            
-            # Показываем главное меню
-            start(callback.message)
-            
-        elif data == 'show_today':
-            # Удаляем сообщение с кнопками
-            try:
-                bot.delete_message(callback.message.chat.id, callback.message.message_id)
-            except:
-                pass
-            
-            # Показываем сегодня
-            today_command(callback.message)
-            
-        elif data == 'show_tomorrow':
-            # Удаляем сообщение с кнопками
-            try:
-                bot.delete_message(callback.message.chat.id, callback.message.message_id)
-            except:
-                pass
-            
-            # Показываем завтра
-            tomorrow_command(callback.message)
-            
-        elif data == 'current_week':
-            bot.answer_callback_query(
-                callback.id,
-                f"{EMOJIS['success']} Уже отображается текущая неделя"
-            )
-            
-    except Exception as e:
-        bot.answer_callback_query(
-            callback.id,
-            f"{EMOJIS['error']} Ошибка обновления"
-        )
+                # Обновляем кнопки
+                markup_inline = types.InlineKeyboardMarkup(row_width=2)
+                btn_other_week = types.InlineKeyboardButton(
+                    '📖 II неделя',
+                    callback_data=f'week_II_{day_name}'
+                )
+                btn_current = types.InlineKeyboardButton(
+                    '✅ I неделя',
+                    callback_data='current'
+                )
+                btn_today = types.InlineKeyboardButton(
+                    '📅 Сегодня',
+                    callback_data='show_today'
+                )
+                btn_menu = types.InlineKeyboardButton(
+                    '🏠 Меню',
+                    callback_data='back_to_menu'
+                )
+                markup_inline.row(btn_other_week)
+                markup_inline.row(btn_today, btn_menu)
 
-# ================ ФУНКЦИИ ДЛЯ RENDER ================
+                bot.edit_message_reply_markup(
+                    callback.message.chat.id,
+                    callback.message.message_id,
+                    reply_markup=markup_inline
+                )
+                bot.answer_callback_query(callback.id, "Показана I неделя")
+            except:
+                bot.answer_callback_query(callback.id, "Ошибка обновления")
+
+    elif callback.data.startswith('week_II_'):
+        day_name = callback.data.split('_')[2]
+        if day_name in schedule and "II" in schedule[day_name]:
+            try:
+                bot.edit_message_text(
+                    schedule[day_name]["II"],
+                    callback.message.chat.id,
+                    callback.message.message_id - 1
+                )
+                # Обновляем кнопки
+                markup_inline = types.InlineKeyboardMarkup(row_width=2)
+                btn_other_week = types.InlineKeyboardButton(
+                    '📖 I неделя',
+                    callback_data=f'week_I_{day_name}'
+                )
+                btn_current = types.InlineKeyboardButton(
+                    '✅ II неделя',
+                    callback_data='current'
+                )
+                btn_today = types.InlineKeyboardButton(
+                    '📅 Сегодня',
+                    callback_data='show_today'
+                )
+                btn_menu = types.InlineKeyboardButton(
+                    '🏠 Меню',
+                    callback_data='back_to_menu'
+                )
+                markup_inline.row(btn_other_week)
+                markup_inline.row(btn_today, btn_menu)
+
+                bot.edit_message_reply_markup(
+                    callback.message.chat.id,
+                    callback.message.message_id,
+                    reply_markup=markup_inline
+                )
+                bot.answer_callback_query(callback.id, "Показана II неделя")
+            except:
+                bot.answer_callback_query(callback.id, "Ошибка обновления")
+
+    elif callback.data == 'back_to_menu':
+        try:
+            bot.delete_message(callback.message.chat.id, callback.message.message_id)
+        except:
+            pass
+        start(callback.message)
+
+    elif callback.data == 'show_today':
+        try:
+            bot.delete_message(callback.message.chat.id, callback.message.message_id)
+        except:
+            pass
+        today_command(callback.message)
+
+    elif callback.data == 'current':
+        bot.answer_callback_query(callback.id, "Уже отображается текущая неделя")
+
+
+# ================ ЗАПУСК ================
+
+
 def run_flask_server():
-    """Запуск Flask сервера для Render"""
     try:
         port = int(os.environ.get('PORT', 10000))
-        print(f"{EMOJIS['success']} Flask сервер запущен на порту: {port}")
+        print(f"🚀 =========================================")
+        print(f"🚀 Flask сервер запускается на порту: {port}")
+        print(f"🚀 =========================================")
         app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False, threaded=True)
     except Exception as e:
-        print(f"{EMOJIS['error']} Ошибка Flask: {e}")
+        print(f"❌ Ошибка Flask: {e}")
+        # Запускаем бота даже если Flask упал
+        return
+
+# ================ ФУНКЦИЯ ДЛЯ ПОДДЕРЖАНИЯ ЖИЗНИ БОТА ================
 
 def keep_alive():
-    """Периодически пингует бота, чтобы он не засыпал"""
+    """
+    Периодически пингует бота, чтобы он не засыпал на Render Free
+    """
+    # Ждем 40 секунд перед первым пингом (даем боту полностью запуститься)
     time.sleep(40)
     
-    # ЗАМЕНИТЕ НА ВАШ НАСТОЯЩИЙ URL
-    YOUR_RENDER_URL = "https://schedule-bot-x6xr.onrender.com"
+    # Ваш URL с Render (ЗАМЕНИТЕ на ваш настоящий URL!)
+    YOUR_RENDER_URL = "https://schedule-bot-x6xr.onrender.com"  # <-- ВАЖНО: ЗАМЕНИТЕ ЭТО!
     
     while True:
         try:
+            # Пингуем endpoint /ping
             response = requests.get(f"{YOUR_RENDER_URL}/ping", timeout=10)
-            print(f"{EMOJIS['success']} Keep-alive ping: {response.status_code}")
+            print(f"✅ Keep-alive ping отправлен: {response.status_code}")
         except Exception as e:
-            print(f"{EMOJIS['warning']} Keep-alive ошибка: {e}")
+            print(f"⚠️ Keep-alive не удался: {e}")
         
-        time.sleep(480)
+        # Ждем 8 минут между пингами (меньше чем 15 минут сна на Render)
+        time.sleep(480)  # 8 минут = 480 секунд
+
+# ================ ФУНКЦИЯ ЗАПУСКА TELEGRAM БОТА ================
 
 def run_telegram_bot():
-    """Запуск Telegram бота"""
-    print(f"{EMOJIS['university']} Telegram бот запущен!")
-    print(f"{EMOJIS['pin']} Начало семестра: {START_DATE.strftime('%d.%m.%Y')}")
-    print(f"{EMOJIS['week']} Текущая неделя: {get_current_week()}")
-    
-    try:
-        bot.polling(none_stop=True, interval=1, timeout=60)
-    except Exception as e:
-        print(f"{EMOJIS['error']} Ошибка бота: {e}")
-        time.sleep(5)
-        run_telegram_bot()
+    print("🤖 Telegram бот запущен!")
+    # ... ваш существующий код остается без изменений ...
 
-# ================ ЗАПУСК ПРИЛОЖЕНИЯ ================
+def run_telegram_bot():
+    print("🤖 Telegram бот запущен!")
+    print(f"📅 Семестр начинается: {START_DATE.strftime('%d.%m.%Y')}")
+    print(f"📆 Текущая неделя: {get_current_week()}")
+    bot.polling(none_stop=True, interval=1, timeout=60)
+
 if __name__ == "__main__":
-    print(f"{EMOJIS['university']} ===== ЗАПУСК СИСТЕМЫ =====")
+    print("🎬 ===== НАЧАЛО ЗАПУСКА СИСТЕМЫ =====")
     
-    # Запуск keep-alive в отдельном потоке
-    print(f"1. {EMOJIS['clock']} Запуск keep-alive...")
+    # 1. Запускаем keep-alive в отдельном потоке
+    print("1. Запуск системы keep-alive...")
     keep_alive_thread = threading.Thread(target=keep_alive)
     keep_alive_thread.daemon = True
     keep_alive_thread.start()
     
-    # Запуск Flask сервера
-    print(f"2. {EMOJIS['success']} Запуск Flask сервера...")
+    # 2. Запускаем Flask сервер
+    print("2. Запуск Flask сервера...")
     flask_thread = threading.Thread(target=run_flask_server)
     flask_thread.daemon = True
     flask_thread.start()
     
-    # Ожидание запуска
-    print(f"3. {EMOJIS['clock']} Ожидание запуска компонентов...")
+    # 3. Ждем запуска Flask
+    print("3. Ожидание запуска компонентов (5 секунд)...")
     time.sleep(5)
     
-    # Запуск Telegram бота
-    print(f"4. {EMOJIS['university']} Запуск Telegram бота...")
+    # 4. Запускаем Telegram бота
+    print("4. Запуск Telegram бота...")
     run_telegram_bot()
     
-    print(f"{EMOJIS['success']} Все системы запущены!")
+    print("🏁 Все системы успешно запущены!")
+
+Не работает Сменить неделю и сделай красивое оформление
