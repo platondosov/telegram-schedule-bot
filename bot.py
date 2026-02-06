@@ -553,17 +553,45 @@ if __name__ == "__main__":
     print(f"📆 Текущая неделя: {get_current_week()}")
     bot.polling(none_stop=True)
 
+# ================ ЗАПУСК БОТА ================
+import os
+import time
+import threading
+from flask import Flask
+
+# Flask приложение
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!", 200
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+def run_flask():
+    port = int(os.environ.get('PORT', 10000))
+    print(f"🚀 Flask запущен на порту {port}")
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
+def run_telegram_bot():
+    print("🤖 Бот с расписанием запущен!")
+    print(f"📅 Семестр начинается: {START_DATE.strftime('%d.%m.%Y')}")
+    print(f"📆 Текущая неделя: {get_current_week()}")
+    bot.polling(none_stop=True, interval=1, timeout=60)
+
 if __name__ == "__main__":
-    # Запускаем Flask в отдельном потоке
+    # Запускаем Flask
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
-
-    # Даем Flask время запуститься
+    
+    # Ждем 2 секунды
     time.sleep(2)
+    
+    # Запускаем Telegram бота
+    run_telegram_bot()
 
-    # Запускаем бота
-
-    run_bot()
 
 
