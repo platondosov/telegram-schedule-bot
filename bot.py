@@ -1,6 +1,7 @@
 import telebot
 from telebot import types
 from datetime import datetime, timedelta
+import requests
 import os  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
 import time  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
 import threading  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
@@ -548,6 +549,7 @@ def callback_handler(callback):
 
 # ================ ЗАПУСК ================
 
+
 def run_flask_server():
     try:
         port = int(os.environ.get('PORT', 10000))
@@ -560,6 +562,35 @@ def run_flask_server():
         # Запускаем бота даже если Flask упал
         return
 
+# ================ ФУНКЦИЯ ДЛЯ ПОДДЕРЖАНИЯ ЖИЗНИ БОТА ================
+
+def keep_alive():
+    """
+    Периодически пингует бота, чтобы он не засыпал на Render Free
+    """
+    # Ждем 40 секунд перед первым пингом (даем боту полностью запуститься)
+    time.sleep(40)
+    
+    # Ваш URL с Render (ЗАМЕНИТЕ на ваш настоящий URL!)
+    YOUR_RENDER_URL = "https://schedule-bot-x6xr.onrender.com"  # <-- ВАЖНО: ЗАМЕНИТЕ ЭТО!
+    
+    while True:
+        try:
+            # Пингуем endpoint /ping
+            response = requests.get(f"{YOUR_RENDER_URL}/ping", timeout=10)
+            print(f"✅ Keep-alive ping отправлен: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ Keep-alive не удался: {e}")
+        
+        # Ждем 8 минут между пингами (меньше чем 15 минут сна на Render)
+        time.sleep(480)  # 8 минут = 480 секунд
+
+# ================ ФУНКЦИЯ ЗАПУСКА TELEGRAM БОТА ================
+
+def run_telegram_bot():
+    print("🤖 Telegram бот запущен!")
+    # ... ваш существующий код остается без изменений ...
+
 def run_telegram_bot():
     print("🤖 Telegram бот запущен!")
     print(f"📅 Семестр начинается: {START_DATE.strftime('%d.%m.%Y')}")
@@ -567,19 +598,28 @@ def run_telegram_bot():
     bot.polling(none_stop=True, interval=1, timeout=60)
 
 if __name__ == "__main__":
-    print("🎬 ===== НАЧАЛО ЗАПУСКА =====")
+    print("🎬 ===== НАЧАЛО ЗАПУСКА СИСТЕМЫ =====")
     
-    # Запускаем Flask
-    print("1. Запуск Flask сервера...")
+    # 1. Запускаем keep-alive в отдельном потоке
+    print("1. Запуск системы keep-alive...")
+    keep_alive_thread = threading.Thread(target=keep_alive)
+    keep_alive_thread.daemon = True
+    keep_alive_thread.start()
+    
+    # 2. Запускаем Flask сервер
+    print("2. Запуск Flask сервера...")
     flask_thread = threading.Thread(target=run_flask_server)
     flask_thread.daemon = True
     flask_thread.start()
     
-    # Ждем
-    print("2. Ожидание запуска Flask (4 секунды)...")
-    time.sleep(4)
+    # 3. Ждем запуска Flask
+    print("3. Ожидание запуска компонентов (5 секунд)...")
+    time.sleep(5)
     
-    # Запускаем бота
-    print("3. Запуск Telegram бота...")
+    # 4. Запускаем Telegram бота
+    print("4. Запуск Telegram бота...")
     run_telegram_bot()
+    
+    print("🏁 Все системы успешно запущены!")
+
 
