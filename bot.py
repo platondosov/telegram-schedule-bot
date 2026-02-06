@@ -546,52 +546,27 @@ def callback_handler(callback):
         bot.answer_callback_query(callback.id, "Уже отображается текущая неделя")
 
 
-# Запуск бота
-if __name__ == "__main__":
-    print("🤖 Бот с расписанием запущен!")
-    print(f"📅 Семестр начинается: {START_DATE.strftime('%d.%m.%Y')}")
-    print(f"📆 Текущая неделя: {get_current_week()}")
-    bot.polling(none_stop=True)
+# ================ ЗАПУСК ================
 
-# ================ ЗАПУСК БОТА ================
-import os
-import time
-import threading
-from flask import Flask
-
-# Flask приложение
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running!", 200
-
-@app.route('/health')
-def health():
-    return "OK", 200
-
-def run_flask():
+def run_flask_server():
     port = int(os.environ.get('PORT', 10000))
-    print(f"🚀 Flask запущен на порту {port}")
+    print(f"🚀 Flask сервер запущен на порту {port}")
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 def run_telegram_bot():
-    print("🤖 Бот с расписанием запущен!")
+    print("🤖 Telegram бот запущен!")
     print(f"📅 Семестр начинается: {START_DATE.strftime('%d.%m.%Y')}")
     print(f"📆 Текущая неделя: {get_current_week()}")
     bot.polling(none_stop=True, interval=1, timeout=60)
 
 if __name__ == "__main__":
-    # Запускаем Flask
-    flask_thread = threading.Thread(target=run_flask)
+    # Запускаем Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask_server)
     flask_thread.daemon = True
     flask_thread.start()
     
-    # Ждем 2 секунды
+    # Ждем немного чтобы Flask успел запуститься
     time.sleep(2)
     
     # Запускаем Telegram бота
     run_telegram_bot()
-
-
-
