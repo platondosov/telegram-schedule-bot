@@ -16,6 +16,14 @@ def home():
 @app.route('/health')
 def health():
     return "OK", 200
+
+@app.route('/ping')
+def ping():
+    return "pong", 200
+
+@app.route('/health')
+def health():
+    return "OK", 200
 def run_flask():
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)    
@@ -561,3 +569,4 @@ if __name__ == "__main__":
     # Запускаем бота
 
     run_bot()
+
