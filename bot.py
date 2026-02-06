@@ -13,10 +13,6 @@ app = Flask(__name__)
 def home():
     return "Bot is running!", 200
 
-@app.route('/health')
-def health():
-    return "OK", 200
-
 @app.route('/ping')
 def ping():
     return "pong", 200
@@ -569,4 +565,5 @@ if __name__ == "__main__":
     # Запускаем бота
 
     run_bot()
+
 
