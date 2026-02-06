@@ -16,6 +16,10 @@ def home():
 @app.route('/health')
 def health():
     return "OK", 200
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)    
+    
 
 # === ИСПРАВЬТЕ ТОКЕН БОТА ЗДЕСЬ ===
 # Для теста можно оставить ваш, но лучше создать нового бота
@@ -555,4 +559,5 @@ if __name__ == "__main__":
     time.sleep(2)
 
     # Запускаем бота
+
     run_bot()
