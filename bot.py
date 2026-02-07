@@ -881,4 +881,23 @@ if __name__ == "__main__":
     
     # 1. Запускаем keep-alive в отдельном потоке
     print("1. Запуск системы keep-alive...")
-    keep_alive_thread = threading.Thread(target=keep
+    keep_alive_thread = threading.Thread(target=keep_alive)
+    keep_alive_thread.daemon = True
+    keep_alive_thread.start()
+    
+    # 2. Запускаем Flask сервер
+    print("2. Запуск Flask сервера...")
+    flask_thread = threading.Thread(target=run_flask_server)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    # 3. Ждем запуска Flask
+    print("3. Ожидание запуска компонентов (5 секунд)...")
+    time.sleep(5)
+    
+    # 4. Запускаем Telegram бота
+    print("4. Запуск Telegram бота...")
+    run_telegram_bot()
+    
+    print("🏁 Все системы успешно запущены!")
+
