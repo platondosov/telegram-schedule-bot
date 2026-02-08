@@ -34,7 +34,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 
-BOT_TOKEN = "8578543913:AAFyhWsjOz_y7SKNlierHSnXvv5CHvYjzEM"
+BOT_TOKEN = "8036446753:AAHFkS2ntHfOFDIHJvrmEz9CHpeLCAZCJ1M"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Дата начала весеннего семестра 2025-2026
@@ -1378,3 +1378,4 @@ if __name__ == "__main__":
     run_telegram_bot()
 
     print("🏁 Все системы успешно запущены!")
+
