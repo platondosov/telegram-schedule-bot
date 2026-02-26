@@ -1330,7 +1330,7 @@ def keep_alive():
     time.sleep(40)
 
     # Ваш URL с Render
-    YOUR_RENDER_URL = "https://schedule-bot-x6xr.onrender.com"
+    YOUR_RENDER_URL = "https://telegram-schedule-bot-y7r4.onrender.com"
 
     while True:
         try:
@@ -1378,4 +1378,5 @@ if __name__ == "__main__":
     run_telegram_bot()
 
     print("🏁 Все системы успешно запущены!")
+
 
