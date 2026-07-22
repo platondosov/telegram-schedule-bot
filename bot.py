@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from flask import Flask
 import telebot
 from telebot import types
+from PIL import Image, ImageDraw, ImageFont
+import io
 
 # ================ КОНФИГУРАЦИЯ ================
 
@@ -128,6 +130,10 @@ def get_inline_schedule_keyboard(day_name, current_view_week):
     markup.add(
         types.InlineKeyboardButton(f'🔄 Показать {other_week} неделю', callback_data=f'view_{other_week}_{day_name}'),
         types.InlineKeyboardButton(f'⚙️ Сменить на {other_week}', callback_data=f'set_week_{other_week}')
+    )
+    # НОВАЯ КНОПКА ЗДЕСЬ:
+    markup.add(
+        types.InlineKeyboardButton('🖼 Отправить картинкой', callback_data=f'share_img_{day_name}_{current_view_week}')
     )
     markup.add(
         types.InlineKeyboardButton('📅 Сегодня', callback_data='show_today'),
@@ -320,6 +326,35 @@ def show_day_with_week_buttons(message_or_call, day_name, prefix="", force_week=
     else:
         bot.send_message(chat_id, response, reply_markup=markup, parse_mode='Markdown')
 
+def generate_schedule_image(text):
+    """Генерирует картинку с текстом расписания"""
+    # Создаем темный фон
+    img = Image.new('RGB', (800, 600), color='#1e1e1e')
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        # Пытаемся загрузить красивый шрифт (если скачаете файл arial.ttf в папку)
+        font = ImageFont.truetype("arial.ttf", 26)
+    except IOError:
+        # Если шрифта нет, используем стандартный (будет мелковат, но сработает)
+        font = ImageFont.load_default()
+
+    # Очищаем текст от Markdown звездочек
+    clean_text = text.replace('*', '')
+    
+    # Рисуем текст на картинке
+    draw.text((40, 40), clean_text, font=font, fill='#ffffff')
+    
+    # Рисуем водяной знак бота
+    draw.text((40, 550), "Сгенерировано в @ВашБот", font=font, fill='#aaaaaa')
+    
+    # Переводим картинку в байты для отправки в Telegram
+    bio = io.BytesIO()
+    bio.name = 'schedule.png'
+    img.save(bio, 'PNG')
+    bio.seek(0)
+    return bio
+
 # ================ UNIFIED CALLBACK HANDLER ================
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -357,6 +392,21 @@ def callback_handler(call):
         bot.delete_message(call.message.chat.id, call.message.message_id)
         if data == 'back_to_menu':
             bot.send_message(call.message.chat.id, "🏠 Главное меню", reply_markup=get_main_keyboard())
+    elif data.startswith('share_img_'):
+        _, day_name, week = data.split('_', 2)
+        user_subgroup = get_user_subgroup(call.message.chat.id)
+        
+        try:
+            sch_text = schedule[user_subgroup][day_name][week]
+            bot.send_message(call.message.chat.id, "🎨 Генерирую картинку...")
+            
+            # Создаем и отправляем фото
+            img_bytes = generate_schedule_image(sch_text)
+            bot.send_photo(call.message.chat.id, photo=img_bytes, caption="Перешлите это расписание одногруппникам! 🚀")
+            bot.answer_callback_query(call.id)
+        except Exception as e:
+            bot.answer_callback_query(call.id, "Ошибка при создании картинки", show_alert=True)
+            print(e)
 
 # ================ FLASK & ЗАПУСК ================
 
