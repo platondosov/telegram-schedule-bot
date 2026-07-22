@@ -407,7 +407,10 @@ def callback_handler(call):
         if data == 'back_to_menu':
             bot.send_message(call.message.chat.id, "🏠 Главное меню", reply_markup=get_main_keyboard())
     elif data.startswith('share_img_'):
-        _, day_name, week = data.split('_', 2)
+        # Убираем префикс и корректно разбиваем остаток на день и неделю
+        clean_data = data.replace('share_img_', '') 
+        day_name, week = clean_data.split('_')
+        
         user_subgroup = get_user_subgroup(call.message.chat.id)
         
         try:
@@ -420,7 +423,7 @@ def callback_handler(call):
             bot.answer_callback_query(call.id)
         except Exception as e:
             bot.answer_callback_query(call.id, "Ошибка при создании картинки", show_alert=True)
-            print(e)
+            print(f"Ошибка генерации картинки: {e}")
 
 # ================ FLASK & ЗАПУСК ================
 
