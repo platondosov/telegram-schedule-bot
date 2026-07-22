@@ -1,1382 +1,338 @@
-import telebot
-from telebot import types
-from datetime import datetime, timedelta
-import requests
 import os
 import time
-import threading
-from flask import Flask
 import json
-import pickle
 import atexit
+import threading
+import requests
+from datetime import datetime, timedelta
+from flask import Flask
+import telebot
+from telebot import types
 
-# Flask приложение для Render
-app = Flask(__name__)
+# ================ КОНФИГУРАЦИЯ ================
 
-
-@app.route('/')
-def home():
-    return "Bot is running!", 200
-
-
-@app.route('/ping')
-def ping():
-    return "pong", 200
-
-
-@app.route('/health')
-def health():
-    return "OK", 200
-
-
-def run_flask():
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-
-
-BOT_TOKEN = "8036446753:AAHFkS2ntHfOFDIHJvrmEz9CHpeLCAZCJ1M"
+# Лучше задавать токен через переменные окружения в Render
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8036446753:AAHFkS2ntHfOFDIHJvrmEz9CHpeLCAZCJ1M")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Дата начала весеннего семестра 2025-2026
-START_DATE = datetime(2026, 2, 9)  # 09.02.2026 - начало семестра
+app = Flask(__name__)
+DATA_FILE = "user_data.json"
+START_DATE = datetime(2026, 2, 9)
 
-# Словари для хранения данных пользователей
-user_selected_weeks = {}
-user_selected_subgroups = {}  # 1 или 2 подгруппа
-DATA_FILE = "user_data.pkl"
+# Данные пользователей в памяти
+user_data = {
+    'weeks': {},       # user_id (str) -> str ("I", "II", "auto")
+    'subgroups': {}    # user_id (str) -> int (1 или 2)
+}
 
-
-def save_data():
-    """Сохраняет данные пользователей в файл"""
-    try:
-        data = {
-            'weeks': user_selected_weeks,
-            'subgroups': user_selected_subgroups
-        }
-        with open(DATA_FILE, 'wb') as f:
-            pickle.dump(data, f)
-        print("✅ Данные сохранены")
-    except Exception as e:
-        print(f"❌ Ошибка сохранения данных: {e}")
-
-
-def load_data():
-    """Загружает данные пользователей из файла"""
-    global user_selected_weeks, user_selected_subgroups
-    try:
-        with open(DATA_FILE, 'rb') as f:
-            data = pickle.load(f)
-            user_selected_weeks = data.get('weeks', {})
-            user_selected_subgroups = data.get('subgroups', {})
-        print(f"✅ Данные загружены. Пользователей: {len(user_selected_subgroups)}")
-    except FileNotFoundError:
-        print("ℹ️ Файл данных не найден, создаем новый")
-        user_selected_weeks = {}
-        user_selected_subgroups = {}
-    except Exception as e:
-        print(f"❌ Ошибка загрузки данных: {e}")
-        user_selected_weeks = {}
-        user_selected_subgroups = {}
-
-
-# Загружаем данные при старте
-load_data()
-atexit.register(save_data)
-
-
-def get_current_week():
-    today = datetime.now()
-    print(f"🔍 Отладка: Сегодня: {today.strftime('%d.%m.%Y')}, Начало семестра: {START_DATE.strftime('%d.%m.%Y')}")
-
-    # Если сегодня день начала семестра - это II неделя (по условию задачи)
-    if today.date() == START_DATE.date():
-        print("🔍 Отладка: Сегодня начало семестра, возвращаем II (согласно условию)")
-        return "II"
-
-    # Если до начала семестра
-    if today < START_DATE:
-        print("🔍 Отладка: До начала семестра, возвращаем II (согласно условию)")
-        return "II"
-
-    days_diff = (today - START_DATE).days
-    week_num = (days_diff // 7) % 2
-
-    print(f"🔍 Отладка: Дней от начала: {days_diff}, Неделя №: {week_num}")
-
-    # ИЗМЕНЕНО: Семестр начинается со II недели, поэтому:
-    # 0 -> II неделя (было I)
-    # 1 -> I неделя (было II)
-    result = "II" if week_num == 0 else "I"  # ИНВЕРСИРОВАНО!
-    print(f"🔍 Отладка: Результат: {result}")
-    return result
-
-
-# Функция получения недели для конкретного пользователя
-def get_user_week(user_id):
-    """Возвращает неделю для пользователя: выбранную или автоматическую"""
-    if user_id in user_selected_weeks:
-        if user_selected_weeks[user_id] == "auto":
-            return get_current_week()
-        return user_selected_weeks[user_id]
-    return get_current_week()
-
-
-# Функция получения подгруппы пользователя
-def get_user_subgroup(user_id):
-    """Возвращает подгруппу пользователя (1 или 2)"""
-    return user_selected_subgroups.get(user_id, 1)  # По умолчанию 1 подгруппа
-
-
-# Расписание для двух подгрупп (остается без изменений)
+# ================ РАСПИСАНИЕ ================
+# (Твой оригинальный словарь schedule оставлен без изменений)
 schedule = {
-    # Подгруппа 1 (ваше оригинальное расписание)
     1: {
         "Понедельник": {
-            "I": """📅 *ПОНЕДЕЛЬНИК | I неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Алгоритмы и структуры данных (лр 110а-1)
-
-*2 пара (09:35-11:00):*
-• Физика (лк 137-4, доц. Тульев В.В.)
-
-*3 пара (11:25-12:50):*
-• Компьютерные системы и сети (лр 105-1)
-
-*Вторая половина дня:*
-• Свободно""",
-
-            "II": """📅 *ПОНЕДЕЛЬНИК | II неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Свободно
-
-*2 пара (09:35-11:00):*
-• Великая Отечественная война советского народа (лк 222-4, доц. Острога В.М)
-
-*3 пара (11:25-12:50):*
-• Свободно
-
-*4 пара (13:00-14:25):*
-• Свободно"""
+            "I": "📅 *ПОНЕДЕЛЬНИК | I неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Алгоритмы и структуры данных (лр 110а-1)\n\n*2 пара (09:35-11:00):*\n• Физика (лк 137-4, доц. Тульев В.В.)\n\n*3 пара (11:25-12:50):*\n• Компьютерные системы и сети (лр 105-1)\n\n*Вторая половина дня:*\n• Свободно",
+            "II": "📅 *ПОНЕДЕЛЬНИК | II неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Свободно\n\n*2 пара (09:35-11:00):*\n• Великая Отечественная война советского народа (лк 222-4, доц. Острога В.М)\n\n*3 пара (11:25-12:50):*\n• Свободно\n\n*4 пара (13:00-14:25):*\n• Свободно"
         },
-
         "Вторник": {
-            "I": """📅 *ВТОРНИК | I неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (пз 110-4)
-
-*2 пара (09:35-11:00):*
-• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)
-
-*3 пара (11:25-12:50):*
-• Физика (лк 114-4, доц. Тульев В.В.)
-
-*4 пара (13:00-14:25):*
-• Немецкий язык (пз 239-2 общ.)""",
-
-            "II": """📅 *ВТОРНИК | II неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (пз 110-4)
-
-*2 пара (09:35-11:00):*
-• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)
-
-*3 пара (11:25-12:50):*
-• Физика (лк 114-4, доц. Тульев В.В.)
-
-*4 пара (13:00-14:25):*
-• Немецкий язык (пз 239-2 общ.)"""
+            "I": "📅 *ВТОРНИК | I неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (пз 110-4)\n\n*2 пара (09:35-11:00):*\n• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)\n\n*3 пара (11:25-12:50):*\n• Физика (лк 114-4, доц. Тульев В.В.)\n\n*4 пара (13:00-14:25):*\n• Немецкий язык (пз 239-2 общ.)",
+            "II": "📅 *ВТОРНИК | II неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (пз 110-4)\n\n*2 пара (09:35-11:00):*\n• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)\n\n*3 пара (11:25-12:50):*\n• Физика (лк 114-4, доц. Тульев В.В.)\n\n*4 пара (13:00-14:25):*\n• Немецкий язык (пз 239-2 общ.)"
         },
-
         "Среда": {
-            "I": """📅 *СРЕДА | I неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Политология (пз 334-4) - с 18.03
-
-*2 пара (09:35-11:00):*
-• История мировой культуры (лк 100-3а, доц. Доморад А.А.)
-• Политология (лк 137-4, доц. Крючек П.С.)
-
-*3 пара (11:25-12:50):*
-• Алгоритмы и структуры данных (лк 440-4, доц. Шиман Д.В.)
-
-*4 пара (13:00-14:25):*
-• Физическая культура""",
-
-            "II": """📅 *СРЕДА | II неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• История мировой культуры (пз 149-4)
-
-*2 пара (09:35-11:00):*
-• История мировой культуры (лк 100-3а, доц. Доморад А.А.)
-• Политология (лк 137-4, доц. Крючек П.С.)
-
-*3 пара (11:25-12:50):*
-• Компьютерные системы и сети (лк 440-4, ст. преп. Королёв А.А.)
-
-*4 пара (13:00-14:25):*
-• Физическая культура"""
+            "I": "📅 *СРЕДА | I неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Политология (пз 334-4) - с 18.03\n\n*2 пара (09:35-11:00):*\n• История мировой культуры (лк 100-3а, доц. Доморад А.А.)\n• Политология (лк 137-4, доц. Крючек П.С.)\n\n*3 пара (11:25-12:50):*\n• Алгоритмы и структуры данных (лк 440-4, доц. Шиман Д.В.)\n\n*4 пара (13:00-14:25):*\n• Физическая культура",
+            "II": "📅 *СРЕДА | II неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• История мировой культуры (пз 149-4)\n\n*2 пара (09:35-11:00):*\n• История мировой культуры (лк 100-3а, доц. Доморад А.А.)\n• Политология (лк 137-4, доц. Крючек П.С.)\n\n*3 пара (11:25-12:50):*\n• Компьютерные системы и сети (лк 440-4, ст. преп. Королёв А.А.)\n\n*4 пара (13:00-14:25):*\n• Физическая культура"
         },
-
         "Четверг": {
-            "I": """📅 *ЧЕТВЕРГ | I неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Свободно
-
-*2 пара (09:35-11:00):*
-• История белорусской государственности (лк 301-4, доц. Коваль О.В.)
-
-*3 пара (11:25-12:50):*
-• Физика (лр 506, 512, 503, 513-1)
-
-*4 пара (13:00-14:25):*
-• Основы алгоритмизации и программирования (лр 322-1)""",
-
-            "II": """📅 *ЧЕТВЕРГ | II неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Свободно
-
-*2 пара (09:35-11:00):*
-• История белорусской государственности (лк 301-4, доц. Коваль О.В.)
-
-*3 пара (11:25-12:50):*
-• Физика (лр 506, 512, 503, 513-1)
-
-*4 пара (13:00-14:25):*
-• Основы алгоритмизации и программирования (лр 322-1)"""
+            "I": "📅 *ЧЕТВЕРГ | I неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Свободно\n\n*2 пара (09:35-11:00):*\n• История белорусской государственности (лк 301-4, доц. Коваль О.В.)\n\n*3 пара (11:25-12:50):*\n• Физика (лр 506, 512, 503, 513-1)\n\n*4 пара (13:00-14:25):*\n• Основы алгоритмизации и программирования (лр 322-1)",
+            "II": "📅 *ЧЕТВЕРГ | II неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Свободно\n\n*2 пара (09:35-11:00):*\n• История белорусской государственности (лк 301-4, доц. Коваль О.В.)\n\n*3 пара (11:25-12:50):*\n• Физика (лр 506, 512, 503, 513-1)\n\n*4 пара (13:00-14:25):*\n• Основы алгоритмизации и программирования (лр 322-1)"
         },
-
         "Пятница": {
-            "I": """📅 *ПЯТНИЦА | I неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)
-
-*2 пара (09:35-11:00):*
-• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)
-
-*3 пара (11:25-12:50):*
-• История белорусской государственности (пз 331-4)
-
-*4 пара (13:00-14:25):*
-• Конструирование программного обеспечения (лр 413-)""",
-
-            "II": """📅 *ПЯТНИЦА | II неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)
-
-*2 пара (09:35-11:00):*
-• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)
-
-*3 пара (11:25-12:50):*
-• История белорусской государственности (пз 331-4)
-
-*4 пара (13:00-14:25):*
-• Конструирование программного обеспечения (лр 413-)"""
+            "I": "📅 *ПЯТНИЦА | I неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)\n\n*2 пара (09:35-11:00):*\n• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)\n\n*3 пара (11:25-12:50):*\n• История белорусской государственности (пз 331-4)\n\n*4 пара (13:00-14:25):*\n• Конструирование программного обеспечения (лр 413-)",
+            "II": "📅 *ПЯТНИЦА | II неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)\n\n*2 пара (09:35-11:00):*\n• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)\n\n*3 пара (11:25-12:50):*\n• История белорусской государственности (пз 331-4)\n\n*4 пара (13:00-14:25):*\n• Конструирование программного обеспечения (лр 413-)"
         },
-
         "Суббота": {
-            "I": """📅 *СУББОТА | I неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Физика (пз 110-4)
-
-*2 пара (09:35-11:00):*
-• Физическая культура
-
-*3 пара (11:25-12:50):*
-• Английский язык (пз 233-2 общ.)
-
-*4 пара (13:00-14:25):*
-• Английский язык (пз 233-2 общ.)""",
-
-            "II": """📅 *СУББОТА | II неделя | Подгруппа 1*
-
-*1 пара (08:00-09:25):*
-• Свободно
-
-*2 пара (09:35-11:00):*
-• Физическая культура
-
-*3 пара (11:25-12:50):*
-• Английский язык (пз 233-2 общ.)
-
-*4 пара (13:00-14:25):*
-• Английский язык (пз 233-2 общ.)"""
+            "I": "📅 *СУББОТА | I неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Физика (пз 110-4)\n\n*2 пара (09:35-11:00):*\n• Физическая культура\n\n*3 пара (11:25-12:50):*\n• Английский язык (пз 233-2 общ.)\n\n*4 пара (13:00-14:25):*\n• Английский язык (пз 233-2 общ.)",
+            "II": "📅 *СУББОТА | II неделя | Подгруппа 1*\n\n*1 пара (08:00-09:25):*\n• Свободно\n\n*2 пара (09:35-11:00):*\n• Физическая культура\n\n*3 пара (11:25-12:50):*\n• Английский язык (пз 233-2 общ.)\n\n*4 пара (13:00-14:25):*\n• Английский язык (пз 233-2 общ.)"
         }
     },
-
-    # Подгруппа 2 (новое расписание с отличиями)
     2: {
         "Понедельник": {
-            "I": """📅 *ПОНЕДЕЛЬНИК | I неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Свободно
-
-*2 пара (09:35-11:00):*
-• Физика (лк 137-4, доц. Тульев В.В.)
-
-*3 пара (11:25-12:50):*
-• Английский язык (пз 233-2 общ.)
-
-*4 пара (13:00-14:25):*
-• Английский язык (пз 233-2 общ.)""",
-
-            "II": """📅 *ПОНЕДЕЛЬНИК | II неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Алгоритмы и структуры данных (лр 110а-1)
-
-*2 пара (09:35-11:00):*
-• Великая Отечественная война советского народа (лк 222-4, доц. Острога В.М)
-
-*3 пара (11:25-12:50):*
-• Английский язык (пз 233-2 общ.)
-
-*4 пара (13:00-14:25):*
-• Английский язык (пз 233-2 общ.)"""
+            "I": "📅 *ПОНЕДЕЛЬНИК | I неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Свободно\n\n*2 пара (09:35-11:00):*\n• Физика (лк 137-4, доц. Тульев В.В.)\n\n*3 пара (11:25-12:50):*\n• Английский язык (пз 233-2 общ.)\n\n*4 пара (13:00-14:25):*\n• Английский язык (пз 233-2 общ.)",
+            "II": "📅 *ПОНЕДЕЛЬНИК | II неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Алгоритмы и структуры данных (лр 110а-1)\n\n*2 пара (09:35-11:00):*\n• Великая Отечественная война советского народа (лк 222-4, доц. Острога В.М)\n\n*3 пара (11:25-12:50):*\n• Английский язык (пз 233-2 общ.)\n\n*4 пара (13:00-14:25):*\n• Английский язык (пз 233-2 общ.)"
         },
-
         "Вторник": {
-            "I": """📅 *ВТОРНИК | I неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (пз 110-4)
-
-*2 пара (09:35-11:00):*
-• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)
-
-*3 пара (11:25-12:50):*
-• Физика (лк 114-4, доц. Тульев В.В.)
-
-*4 пара (13:00-14:25):*
-• Немецкий язык (пз 239-2 общ.)""",
-
-            "II": """📅 *ВТОРНИК | II неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (пз 110-4)
-
-*2 пара (09:35-11:00):*
-• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)
-
-*3 пара (11:25-12:50):*
-• Физика (лк 114-4, доц. Тульев В.В.)
-
-*4 пара (13:00-14:25):*
-• Немецкий язык (пз 239-2 общ.)"""
+            "I": "📅 *ВТОРНИК | I неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (пз 110-4)\n\n*2 пара (09:35-11:00):*\n• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)\n\n*3 пара (11:25-12:50):*\n• Физика (лк 114-4, доц. Тульев В.В.)\n\n*4 пара (13:00-14:25):*\n• Немецкий язык (пз 239-2 общ.)",
+            "II": "📅 *ВТОРНИК | II неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (пз 110-4)\n\n*2 пара (09:35-11:00):*\n• Основы алгоритмизации и программирования (лк 100-3а, доц. Белодед Н.И.)\n\n*3 пара (11:25-12:50):*\n• Физика (лк 114-4, доц. Тульев В.В.)\n\n*4 пара (13:00-14:25):*\n• Немецкий язык (пз 239-2 общ.)"
         },
-
         "Среда": {
-            "I": """📅 *СРЕДА | I неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Политология (пз 334-4) - с 18.03
-
-*2 пара (09:35-11:00):*
-• История мировой культуры (лк 100-3а, доц. Доморад А.А.)
-• Политология (лк 137-4, доц. Крючек П.С.)
-
-*3 пара (11:25-12:50):*
-• Алгоритмы и структуры данных (лк 440-4, доц. Шиман Д.В.)
-
-*4 пара (13:00-14:25):*
-• Физическая культура""",
-
-            "II": """📅 *СРЕДА | II неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• История мировой культуры (пз 149-4)
-
-*2 пара (09:35-11:00):*
-• История мировой культуры (лк 100-3а, доц. Доморад А.А.)
-• Политология (лк 137-4, доц. Крючек П.С.)
-
-*3 пара (11:25-12:50):*
-• Компьютерные системы и сети (лк 440-4, ст. преп. Королёв А.А.)
-
-*4 пара (13:00-14:25):*
-• Физическая культура"""
+            "I": "📅 *СРЕДА | I неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Политология (пз 334-4) - с 18.03\n\n*2 пара (09:35-11:00):*\n• История мировой культуры (лк 100-3а, доц. Доморад А.А.)\n• Политология (лк 137-4, доц. Крючек П.С.)\n\n*3 пара (11:25-12:50):*\n• Алгоритмы и структуры данных (лк 440-4, доц. Шиман Д.В.)\n\n*4 пара (13:00-14:25):*\n• Физическая культура",
+            "II": "📅 *СРЕДА | II неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• История мировой культуры (пз 149-4)\n\n*2 пара (09:35-11:00):*\n• История мировой культуры (лк 100-3а, доц. Доморад А.А.)\n• Политология (лк 137-4, доц. Крючек П.С.)\n\n*3 пара (11:25-12:50):*\n• Компьютерные системы и сети (лк 440-4, ст. преп. Королёв А.А.)\n\n*4 пара (13:00-14:25):*\n• Физическая культура"
         },
-
         "Четверг": {
-            "I": """📅 *ЧЕТВЕРГ | I неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Конструирование программного обеспечения (лр 209-1)
-
-*2 пара (09:35-11:00):*
-• История белорусской государственности (лк 301-4, доц. Коваль О.В.)
-
-*3 пара (11:25-12:50):*
-• Основы алгоритмизации и программирования (лр 322-1)
-
-*4 пара (13:00-14:25):*
-• Физика (лр 506, 512, 503, 513-1)""",
-
-            "II": """📅 *ЧЕТВЕРГ | II неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Конструирование программного обеспечения (лр 209-1)
-
-*2 пара (09:35-11:00):*
-• История белорусской государственности (лк 301-4, доц. Коваль О.В.)
-
-*3 пара (11:25-12:50):*
-• Основы алгоритмизации и программирования (лр 322-1)
-
-*4 пара (13:00-14:25):*
-• Физика (лр 506, 512, 503, 513-1)"""
+            "I": "📅 *ЧЕТВЕРГ | I неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Конструирование программного обеспечения (лр 209-1)\n\n*2 пара (09:35-11:00):*\n• История белорусской государственности (лк 301-4, доц. Коваль О.В.)\n\n*3 пара (11:25-12:50):*\n• Основы алгоритмизации и программирования (лр 322-1)\n\n*4 пара (13:00-14:25):*\n• Физика (лр 506, 512, 503, 513-1)",
+            "II": "📅 *ЧЕТВЕРГ | II неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Конструирование программного обеспечения (лр 209-1)\n\n*2 пара (09:35-11:00):*\n• История белорусской государственности (лк 301-4, доц. Коваль О.В.)\n\n*3 пара (11:25-12:50):*\n• Основы алгоритмизации и программирования (лр 322-1)\n\n*4 пара (13:00-14:25):*\n• Физика (лр 506, 512, 503, 513-1)"
         },
-
         "Пятница": {
-            "I": """📅 *ПЯТНИЦА | I неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)
-
-*2 пара (09:35-11:00):*
-• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)
-
-*3 пара (11:25-12:50):*
-• История белорусской государственности (пз 331-4)
-
-*4 пара (13:00-14:25):*
-• Свободно""",
-
-            "II": """📅 *ПЯТНИЦА | II неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)
-
-*2 пара (09:35-11:00):*
-• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)
-
-*3 пара (11:25-12:50):*
-• История белорусской государственности (пз 331-4)
-
-*4 пара (13:00-14:25):*
-• Свободно"""
+            "I": "📅 *ПЯТНИЦА | I неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)\n\n*2 пара (09:35-11:00):*\n• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)\n\n*3 пара (11:25-12:50):*\n• История белорусской государственности (пз 331-4)\n\n*4 пара (13:00-14:25):*\n• Свободно",
+            "II": "📅 *ПЯТНИЦА | II неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Математический анализ (лк 100-3а, ст. преп. Калиновская Е.В.)\n\n*2 пара (09:35-11:00):*\n• Конструирование программного обеспечения (лк 132-4, ст. преп. Наркевич А.С.)\n\n*3 пара (11:25-12:50):*\n• История белорусской государственности (пз 331-4)\n\n*4 пара (13:00-14:25):*\n• Свободно"
         },
-
         "Суббота": {
-            "I": """📅 *СУББОТА | I неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Физика (пз 110-4)
-
-*2 пара (09:35-11:00):*
-• Физическая культура
-
-*3 пара (11:25-12:50):*
-• Свободно
-
-*4 пара (13:00-14:25):*
-• Свободно""",
-
-            "II": """📅 *СУББОТА | II неделя | Подгруппа 2*
-
-*1 пара (08:00-09:25):*
-• Свободно
-
-*2 пара (09:35-11:00):*
-• Физическая культура
-
-*3 пара (11:25-12:50):*
-• Компьютерные системы и сети (лр 105-1)
-
-*4 пара (13:00-14:25):*
-• Свободно"""
+            "I": "📅 *СУББОТА | I неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Физика (пз 110-4)\n\n*2 пара (09:35-11:00):*\n• Физическая культура\n\n*3 пара (11:25-12:50):*\n• Свободно\n\n*4 пара (13:00-14:25):*\n• Свободно",
+            "II": "📅 *СУББОТА | II неделя | Подгруппа 2*\n\n*1 пара (08:00-09:25):*\n• Свободно\n\n*2 пара (09:35-11:00):*\n• Физическая культура\n\n*3 пара (11:25-12:50):*\n• Компьютерные системы и сети (лр 105-1)\n\n*4 пара (13:00-14:25):*\n• Свободно"
         }
     }
 }
 
+# ================ РАБОТА С ДАННЫМИ ================
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    user_id = message.chat.id
-
-    # Если пользователь не выбрал подгруппу, показываем меню выбора
-    if user_id not in user_selected_subgroups:
-        show_subgroup_selection(message)
-        return
-
-    # Продолжаем обычный старт
-    user_week = get_user_week(user_id)
-    user_subgroup = get_user_subgroup(user_id)
-    today = datetime.now()
-
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-
-    # Кнопки дней недели
-    days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
-    buttons = [types.KeyboardButton(day) for day in days]
-
-    # Располагаем по 2 кнопки в ряд
-    for i in range(0, len(buttons), 2):
-        if i + 1 < len(buttons):
-            markup.row(buttons[i], buttons[i + 1])
-        else:
-            markup.row(buttons[i])
-
-    # Дополнительные кнопки
-    markup.row(
-        types.KeyboardButton('📅 Сегодня'),
-        types.KeyboardButton('📆 Завтра')
-    )
-    markup.row(
-        types.KeyboardButton('ℹ️ Какая неделя?'),
-        types.KeyboardButton('🔄 Сменить неделю')
-    )
-    markup.row(
-        types.KeyboardButton('👥 Сменить подгруппу'),
-        types.KeyboardButton('/help')
-    )
-
-    # Определяем статус недели
-    week_status = ""
-    if user_id in user_selected_weeks:
-        if user_selected_weeks[user_id] == "auto":
-            week_status = "Автоматический режим"
-        else:
-            week_status = f"Ручной режим: {user_selected_weeks[user_id]} неделя"
-    else:
-        week_status = "Автоматический режим"
-
-    # Приветственное сообщение
-    week_num = (today - START_DATE).days // 7 + 1 if today >= START_DATE else 0
-    welcome_msg = f"""
-🎓 *Расписание БГТУ*
-*Семестр начинается:* {START_DATE.strftime('%d.%m.%Y')}
-*Текущая неделя:* {get_current_week()} неделя
-*Ваша неделя:* {user_week} неделя
-*Ваша подгруппа:* {user_subgroup}
-*Режим:* {week_status}
-*С начала семестра:* {week_num} учебная неделя
-
-📅 *{today.strftime('%d.%m.%Y')}* ({['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][today.weekday()]})
-
-Выберите день недели:
-"""
-
-    bot.send_message(message.chat.id, welcome_msg,
-                     reply_markup=markup, parse_mode='Markdown')
-    # Сохраняем данные
-    save_data()
-
-
-def show_subgroup_selection(message):
-    """Показывает меню выбора подгруппы"""
-    markup = types.InlineKeyboardMarkup(row_width=2)
-
-    btn_subgroup_1 = types.InlineKeyboardButton(
-        '👥 Подгруппа 1',
-        callback_data='select_subgroup_1'
-    )
-    btn_subgroup_2 = types.InlineKeyboardButton(
-        '👥 Подгруппа 2',
-        callback_data='select_subgroup_2'
-    )
-
-    markup.row(btn_subgroup_1, btn_subgroup_2)
-
-    bot.send_message(
-        message.chat.id,
-        "👋 *Добро пожаловать в бот расписания БГТУ!*\n\n"
-        "📚 *Пожалуйста, выберите вашу подгруппу:*\n\n"
-        "Вы всегда сможете сменить подгруппу в главном меню.",
-        reply_markup=markup,
-        parse_mode='Markdown'
-    )
-
-
-@bot.message_handler(commands=['help'])
-def help_command(message):
-    print(f"🔍 DEBUG: Получена команда /help от {message.chat.id}")
-
+def save_data():
+    """Сохраняет данные в JSON файл (быстрее и безопаснее Pickle)"""
     try:
-        current_week = get_current_week()
-        start_date_str = START_DATE.strftime('%d.%m.%Y')
-
-        help_text = f"""📚 *ПОМОЩЬ ПО БОТУ РАСПИСАНИЯ БГТУ*
-
-*📋 ОСНОВНЫЕ КОМАНДЫ:*
-/start - Главное меню
-/today - Расписание на сегодня
-/tomorrow - Расписание на завтра
-/week - Какая сейчас неделя (I/II)
-/switch_week - Сменить неделю
-/auto_week - Автоматическое определение недели
-/change_subgroup - Сменить подгруппу
-/help - Эта справка
-
-*📅 КАК ПОЛЬЗОВАТЬСЯ:*
-1. При первом запуске выберите свою подгруппу (1 или 2)
-2. Нажмите на кнопку с днем недели
-3. Бот покажет расписание для этого дня
-4. Используйте кнопки под расписанием для смены недели
-
-*⚙️ РЕЖИМЫ РАБОТЫ:*
-• 🤖 *Автоматический* - бот сам определяет текущую неделю
-• 👨‍💻 *Ручной* - вы выбираете неделю вручную (I или II)
-
-*ℹ️ ИНФОРМАЦИЯ:*
-• Начало семестра: {start_date_str}
-• Текущая неделя: {current_week}
-• Подгруппы могут иметь разное расписание
-
-*🔧 ВОЗМОЖНЫЕ ПРОБЛЕМЫ:*
-• Если бот не отвечает - перезапустите его командой /start
-• Если не видите кнопки - нажмите значок 🎛️ справа от поля ввода
-• Для сброса настроек удалите чат с ботом и начните заново"""
-
-        bot.send_message(
-            message.chat.id,
-            help_text,
-            parse_mode='Markdown',
-            disable_web_page_preview=True
-        )
-        print(f"✅ DEBUG: Помощь отправлена пользователю {message.chat.id}")
-
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(user_data, f, ensure_ascii=False)
     except Exception as e:
-        print(f"❌ ERROR в help_command: {e}")
-        print(f"❌ Тип ошибки: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Ошибка сохранения: {e}")
 
-        # Простое сообщение без форматирования
-        simple_help = """📚 ПОМОЩЬ ПО БОТУ
+def load_data():
+    """Загружает данные из JSON"""
+    global user_data
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            user_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        user_data = {'weeks': {}, 'subgroups': {}}
+        save_data()
 
-Основные команды:
-/start - Главное меню
-/today - Расписание на сегодня
-/tomorrow - Расписание на завтра
-/week - Какая неделя
-/switch_week - Сменить неделю
-/auto_week - Авторежим
-/change_subgroup - Сменить подгруппу
-/help - Справка"""
+load_data()
+atexit.register(save_data)
 
-        bot.send_message(message.chat.id, simple_help)
+# ================ ЛОГИКА ================
 
-
-@bot.message_handler(commands=['today'])
-def today_command(message):
-    user_id = message.chat.id
-    if user_id not in user_selected_subgroups:
-        show_subgroup_selection(message)
-        return
-    show_day_schedule(message, "today")
-
-
-@bot.message_handler(commands=['tomorrow'])
-def tomorrow_command(message):
-    user_id = message.chat.id
-    if user_id not in user_selected_subgroups:
-        show_subgroup_selection(message)
-        return
-    show_day_schedule(message, "tomorrow")
-
-
-@bot.message_handler(commands=['week'])
-def week_command(message):
-    user_id = message.chat.id
-    if user_id not in user_selected_subgroups:
-        show_subgroup_selection(message)
-        return
-
-    current_week = get_current_week()
-    user_week = get_user_week(user_id)
-    user_subgroup = get_user_subgroup(user_id)
+def get_current_week():
     today = datetime.now()
-    week_num = (today - START_DATE).days // 7 + 1 if today >= START_DATE else 0
+    if today.date() <= START_DATE.date():
+        return "II"
+    days_diff = (today - START_DATE).days
+    return "II" if (days_diff // 7) % 2 == 0 else "I"
 
-    week_info = f"""
-📆 *Информация о неделе:*
+def get_user_week(user_id):
+    uid_str = str(user_id)
+    pref = user_data['weeks'].get(uid_str, "auto")
+    return get_current_week() if pref == "auto" else pref
 
-*Текущая неделя:* {current_week}
-*Ваша неделя:* {user_week}
-*Ваша подгруппа:* {user_subgroup}
-*Учебная неделя №:* {week_num}
-*Дата:* {today.strftime('%d.%m.%Y')}
+def get_user_subgroup(user_id):
+    return user_data['subgroups'].get(str(user_id), 1)
 
-*Начало семестра:* {START_DATE.strftime('%d.%m.%Y')}
-*Прошло дней:* {(today - START_DATE).days if today >= START_DATE else 0}
+# ================ ГЕНЕРАТОРЫ UI ================
 
-*Режим:* {"Ручной" if user_id in user_selected_weeks and user_selected_weeks[user_id] != "auto" else "Автоматический"}
-"""
-    bot.send_message(message.chat.id, week_info, parse_mode='Markdown')
+def get_main_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
+    markup.add(*[types.KeyboardButton(day) for day in days])
+    markup.add(types.KeyboardButton('📅 Сегодня'), types.KeyboardButton('📆 Завтра'))
+    markup.add(types.KeyboardButton('ℹ️ Какая неделя?'), types.KeyboardButton('🔄 Сменить неделю'))
+    markup.add(types.KeyboardButton('👥 Сменить подгруппу'), types.KeyboardButton('/help'))
+    return markup
 
-
-@bot.message_handler(commands=['switch_week'])
-def switch_week_command(message):
-    """Команда для смены недели"""
-    user_id = message.chat.id
-    if user_id not in user_selected_subgroups:
-        show_subgroup_selection(message)
-        return
-    show_week_selection_menu(message)
-
-
-@bot.message_handler(commands=['auto_week'])
-def auto_week_command(message):
-    """Вернуться к автоматическому определению недели"""
-    user_id = message.chat.id
-    if user_id not in user_selected_subgroups:
-        show_subgroup_selection(message)
-        return
-
-    user_selected_weeks[user_id] = "auto"
-    save_data()
-
-    bot.send_message(
-        message.chat.id,
-        "✅ *Режим переключен на автоматический!*\n\n"
-        f"Теперь бот будет показывать расписание *{get_current_week()} недели* "
-        "(текущей недели).",
-        parse_mode='Markdown'
+def get_inline_schedule_keyboard(day_name, current_view_week):
+    """Единая функция для генерации инлайн-кнопок под расписанием"""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    other_week = "II" if current_view_week == "I" else "I"
+    
+    markup.add(
+        types.InlineKeyboardButton(f'🔄 Показать {other_week} неделю', callback_data=f'view_{other_week}_{day_name}'),
+        types.InlineKeyboardButton(f'⚙️ Сменить на {other_week}', callback_data=f'set_week_{other_week}')
     )
+    markup.add(
+        types.InlineKeyboardButton('📅 Сегодня', callback_data='show_today'),
+        types.InlineKeyboardButton('🤖 Авто', callback_data='set_week_auto'),
+        types.InlineKeyboardButton('🏠 Меню', callback_data='back_to_menu')
+    )
+    return markup
 
+# ================ ОБРАБОТЧИКИ КОМАНД ================
 
-@bot.message_handler(commands=['change_subgroup'])
-def change_subgroup_command(message):
-    """Сменить подгруппу"""
-    show_subgroup_selection(message)
+@bot.message_handler(commands=['start', 'help', 'today', 'tomorrow', 'week', 'switch_week', 'auto_week', 'change_subgroup'])
+def handle_commands(message):
+    cmd = message.text.split()[0].replace('/', '')
+    user_id = message.chat.id
+    
+    if cmd not in ['start', 'help'] and str(user_id) not in user_data['subgroups']:
+        show_subgroup_selection(message)
+        return
 
+    if cmd == 'start':
+        if str(user_id) not in user_data['subgroups']:
+            show_subgroup_selection(message)
+            return
+            
+        today = datetime.now()
+        week_status = "Автоматический режим" if user_data['weeks'].get(str(user_id), 'auto') == "auto" else f"Ручной режим: {get_user_week(user_id)} неделя"
+        week_num = max(0, (today - START_DATE).days // 7 + 1)
+        
+        msg = (f"🎓 *Расписание БГТУ*\n*Семестр начинается:* {START_DATE.strftime('%d.%m.%Y')}\n"
+               f"*Текущая неделя:* {get_current_week()} неделя\n*Ваша неделя:* {get_user_week(user_id)} неделя\n"
+               f"*Ваша подгруппа:* {get_user_subgroup(user_id)}\n*Режим:* {week_status}\n"
+               f"*С начала семестра:* {week_num} учебная неделя\n\n"
+               f"📅 *{today.strftime('%d.%m.%Y')}* ({['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][today.weekday()]})\n"
+               "Выберите день недели:")
+        bot.send_message(message.chat.id, msg, reply_markup=get_main_keyboard(), parse_mode='Markdown')
+
+    elif cmd == 'help':
+        help_text = f"📚 *ПОМОЩЬ ПО БОТУ*\n\n/start - Главное меню\n/today - На сегодня\n/tomorrow - На завтра\n/week - Какая неделя\n/switch_week - Сменить неделю\n/auto_week - Авторежим\n/change_subgroup - Сменить подгруппу"
+        bot.send_message(message.chat.id, help_text, parse_mode='Markdown')
+        
+    elif cmd in ['today', 'tomorrow']:
+        show_day_schedule(message, cmd)
+        
+    elif cmd == 'week':
+        today = datetime.now()
+        msg = (f"📆 *Информация:*\n*Текущая:* {get_current_week()}\n*Ваша:* {get_user_week(user_id)}\n"
+               f"*Подгруппа:* {get_user_subgroup(user_id)}\n*Учебная неделя №:* {max(0, (today - START_DATE).days // 7 + 1)}")
+        bot.send_message(message.chat.id, msg, parse_mode='Markdown')
+        
+    elif cmd == 'switch_week':
+        show_week_selection_menu(message)
+        
+    elif cmd == 'auto_week':
+        user_data['weeks'][str(user_id)] = "auto"
+        save_data()
+        bot.send_message(message.chat.id, f"✅ *Включен авторежим!*\nТекущая неделя: {get_current_week()}", parse_mode='Markdown')
+        
+    elif cmd == 'change_subgroup':
+        show_subgroup_selection(message)
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     user_id = message.chat.id
-
-    # Проверяем, выбрана ли подгруппа
-    if user_id not in user_selected_subgroups:
+    if str(user_id) not in user_data['subgroups']:
         show_subgroup_selection(message)
         return
 
-    if message.text == '📅 Сегодня':
-        show_day_schedule(message, "today")
-    elif message.text == '📆 Завтра':
-        show_day_schedule(message, "tomorrow")
-    elif message.text == 'ℹ️ Какая неделя?':
-        week_command(message)
-    elif message.text == '🔄 Сменить неделю':
-        show_week_selection_menu(message)
-    elif message.text == '👥 Сменить подгруппу':
-        show_subgroup_selection(message)
-    elif message.text in ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"]:
-        show_day_with_week_buttons(message, message.text)
-    else:
-        bot.send_message(message.chat.id,
-                         "Пожалуйста, выберите день недели из меню ниже 👇")
+    txt = message.text
+    if txt == '📅 Сегодня': show_day_schedule(message, "today")
+    elif txt == '📆 Завтра': show_day_schedule(message, "tomorrow")
+    elif txt == 'ℹ️ Какая неделя?': handle_commands(type('obj', (object,), {'text': '/week', 'chat': message.chat}))
+    elif txt == '🔄 Сменить неделю': show_week_selection_menu(message)
+    elif txt == '👥 Сменить подгруппу': show_subgroup_selection(message)
+    elif txt in ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"]: show_day_with_week_buttons(message, txt)
+    else: bot.send_message(message.chat.id, "Пожалуйста, выберите день недели из меню ниже 👇")
 
+# ================ УТИЛИТЫ ОТОБРАЖЕНИЯ ================
+
+def show_subgroup_selection(message):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton('👥 Подгруппа 1', callback_data='set_sg_1'),
+        types.InlineKeyboardButton('👥 Подгруппа 2', callback_data='set_sg_2')
+    )
+    bot.send_message(message.chat.id, "👋 *Добро пожаловать!*\n📚 *Выберите вашу подгруппу:*", reply_markup=markup, parse_mode='Markdown')
+
+def show_week_selection_menu(message):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton('📘 I неделя', callback_data='set_week_I'),
+        types.InlineKeyboardButton('📗 II неделя', callback_data='set_week_II'),
+        types.InlineKeyboardButton('🤖 Автоматически', callback_data='set_week_auto'),
+        types.InlineKeyboardButton(f'📅 Текущая ({get_current_week()})', callback_data=f'set_week_{get_current_week()}'),
+        types.InlineKeyboardButton('❌ Отмена', callback_data='cancel_action')
+    )
+    bot.send_message(message.chat.id, "🔄 *Смена недели*\nВыберите действие:", reply_markup=markup, parse_mode='Markdown')
 
 def show_day_schedule(message, day_type):
     days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
-    today = datetime.now().weekday()
+    target_idx = (datetime.now().weekday() + (1 if day_type == "tomorrow" else 0)) % 7
+    
+    if target_idx == 6:
+        bot.send_message(message.chat.id, "Выходной день! 🎉\nОтдыхайте!")
+        return
+        
+    prefix = f"📅 *{'СЕГОДНЯ' if day_type == 'today' else 'ЗАВТРА'} ({days[target_idx]})*"
+    show_day_with_week_buttons(message, days[target_idx], prefix)
+
+def show_day_with_week_buttons(message_or_call, day_name, prefix="", force_week=None):
+    chat_id = message_or_call.chat.id if hasattr(message_or_call, 'chat') else message_or_call.message.chat.id
+    user_week = force_week or get_user_week(chat_id)
+    user_subgroup = get_user_subgroup(chat_id)
 
-    if day_type == "today":
-        if today < 6:
-            day_name = days[today]
-            prefix = f"📅 *СЕГОДНЯ ({day_name})*"
-        else:
-            bot.send_message(message.chat.id,
-                             "Сегодня воскресенье - выходной день! 🎉\nОтдыхайте и готовьтесь к новой неделе!")
-            return
-    else:  # tomorrow
-        tomorrow = (today + 1) % 7
-        if tomorrow < 6:
-            day_name = days[tomorrow]
-            tomorrow_date = datetime.now() + timedelta(days=1)
-            prefix = f"📆 *ЗАВТРА ({day_name}, {tomorrow_date.strftime('%d.%m')})*"
-        else:
-            bot.send_message(message.chat.id,
-                             "Завтра воскресенье - выходной день! 🎉")
-            return
-
-    show_day_with_week_buttons(message, day_name, prefix)
-
-
-def show_day_with_week_buttons(message, day_name, prefix=""):
-    user_id = message.chat.id
-    user_week = get_user_week(user_id)
-    user_subgroup = get_user_subgroup(user_id)
-
-    # Проверяем наличие расписания для данной подгруппы, дня и недели
-    if (user_subgroup in schedule and
-            day_name in schedule[user_subgroup] and
-            user_week in schedule[user_subgroup][day_name]):
-
-        response = f"{prefix}\n\n"
-        response += schedule[user_subgroup][day_name][user_week]
-
-        # Создаем inline-кнопки
-        markup_inline = types.InlineKeyboardMarkup(row_width=2)
-
-        # Определяем какую неделю показывать для переключения
-        other_week = "II" if user_week == "I" else "I"
-        current_week = get_current_week()
-
-        btn_other_week = types.InlineKeyboardButton(
-            f'🔄 Показать {other_week} неделю',
-            callback_data=f'week_{other_week}_{day_name}'
-        )
-        btn_switch_global = types.InlineKeyboardButton(
-            f'⚙️ Сменить на {other_week}',
-            callback_data=f'switch_global_{other_week}'
-        )
-        btn_today = types.InlineKeyboardButton(
-            '📅 Сегодня',
-            callback_data='show_today'
-        )
-        btn_auto = types.InlineKeyboardButton(
-            '🤖 Авто',
-            callback_data='switch_auto'
-        )
-        btn_menu = types.InlineKeyboardButton(
-            '🏠 Меню',
-            callback_data='back_to_menu'
-        )
-
-        markup_inline.row(btn_other_week)
-        markup_inline.row(btn_switch_global)
-        markup_inline.row(btn_today, btn_auto, btn_menu)
-
-        mode_text = "Ручной режим" if user_id in user_selected_weeks and user_selected_weeks[
-            user_id] != "auto" else "Автоматический режим"
-
-        # Добавляем информацию о неделе и кнопки в ОДНО сообщение с расписанием
-        response += f"\n\n*Сейчас отображается {user_week} неделя*\n"
-        response += f"*Подгруппа:* {user_subgroup}\n"
-        response += f"*Режим:* {mode_text}\n"
-        response += f"*Текущая неделя:* {current_week}"
-
-        # Отправляем ОДНО сообщение с расписанием и кнопками
-        bot.send_message(message.chat.id, response,
-                         reply_markup=markup_inline,
-                         parse_mode='Markdown')
-    else:
-        bot.send_message(message.chat.id,
-                         f"Расписание на {day_name} для подгруппы {user_subgroup} не найдено")
-
-def show_week_selection_menu(message):
-    """Показывает меню выбора недели"""
-    user_id = message.chat.id
-    current_week = get_current_week()
-
-    markup_inline = types.InlineKeyboardMarkup(row_width=2)
-
-    btn_week_i = types.InlineKeyboardButton(
-        '📘 I неделя',
-        callback_data='set_week_I'
-    )
-    btn_week_ii = types.InlineKeyboardButton(
-        '📗 II неделя',
-        callback_data='set_week_II'
-    )
-    btn_auto = types.InlineKeyboardButton(
-        '🤖 Автоматически',
-        callback_data='set_week_auto'
-    )
-    btn_current_week = types.InlineKeyboardButton(
-        f'📅 Текущая ({current_week})',
-        callback_data='set_week_current'
-    )
-    btn_cancel = types.InlineKeyboardButton(
-        '❌ Отмена',
-        callback_data='cancel_week_switch'
-    )
-
-    markup_inline.row(btn_week_i, btn_week_ii)
-    markup_inline.row(btn_auto, btn_current_week)
-    markup_inline.row(btn_cancel)
-
-    # Определяем текущий статус
-    current_mode = "Автоматический" if user_id not in user_selected_weeks or user_selected_weeks[
-        user_id] == "auto" else "Ручной"
-    current_week_display = get_user_week(user_id)
-
-    bot.send_message(
-        message.chat.id,
-        f"*🔄 Смена недели*\n\n"
-        f"*Текущий режим:* {current_mode}\n"
-        f"*Показывается неделя:* {current_week_display}\n"
-        f"*Текущая неделя:* {current_week}\n\n"
-        f"Выберите действие:",
-        reply_markup=markup_inline,
-        parse_mode='Markdown'
-    )
-
-
-@bot.callback_query_handler(func=lambda callback: True)
-def callback_handler(callback):
-    user_id = callback.message.chat.id
-    print(f"🔍 Callback: {callback.data} от пользователя {user_id}")
-
-    # Обработка выбора подгруппы
-    if callback.data == 'select_subgroup_1':
-        user_selected_subgroups[user_id] = 1
-        save_data()
-
-        bot.edit_message_text(
-            "✅ *Выбрана Подгруппа 1!*\n\n"
-            "Теперь бот будет показывать расписание для первой подгруппы.\n"
-            "Для смены подгруппы используйте кнопку '👥 Сменить подгруппу' в главном меню.",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-        # Запускаем обычный старт
-        time.sleep(1)
-        msg = bot.send_message(user_id, "🔄 Загрузка меню...")
-        start(msg)
-
-    elif callback.data == 'select_subgroup_2':
-        user_selected_subgroups[user_id] = 2
-        save_data()
-
-        bot.edit_message_text(
-            "✅ *Выбрана Подгруппа 2!*\n\n"
-            "Теперь бот будет показывать расписание для второй подгруппы.\n"
-            "Для смены подгруппы используйте кнопку '👥 Сменить подгруппу' в главном меню.",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-        # Запускаем обычный старт
-        time.sleep(1)
-        msg = bot.send_message(user_id, "🔄 Загрузка меню...")
-        start(msg)
-
-
-    elif callback.data.startswith('week_I_'):
-
-        # Показать I неделю для конкретного дня
-
-        day_name = callback.data.split('_')[2]
-
-        user_subgroup = get_user_subgroup(user_id)
-
-        if (user_subgroup in schedule and
-
-                day_name in schedule[user_subgroup] and
-
-                "I" in schedule[user_subgroup][day_name]):
-
-            try:
-
-                # Определяем префикс из текущего сообщения
-
-                message_text = callback.message.text
-
-                lines = message_text.split('\n')
-
-                prefix = lines[0]  # Берем первую строку как префикс
-
-                # Формируем новое сообщение с I неделей
-
-                response = f"{prefix}\n\n"
-
-                response += schedule[user_subgroup][day_name]["I"]
-
-                # Обновляем кнопки
-
-                markup_inline = types.InlineKeyboardMarkup(row_width=2)
-
-                btn_other_week = types.InlineKeyboardButton(
-
-                    '📗 II неделя',
-
-                    callback_data=f'week_II_{day_name}'
-
-                )
-
-                btn_switch_global = types.InlineKeyboardButton(
-
-                    '⚙️ Сменить на II',
-
-                    callback_data='switch_global_II'
-
-                )
-
-                btn_today = types.InlineKeyboardButton(
-
-                    '📅 Сегодня',
-
-                    callback_data='show_today'
-
-                )
-
-                btn_auto = types.InlineKeyboardButton(
-
-                    '🤖 Авто',
-
-                    callback_data='switch_auto'
-
-                )
-
-                btn_menu = types.InlineKeyboardButton(
-
-                    '🏠 Меню',
-
-                    callback_data='back_to_menu'
-
-                )
-
-                markup_inline.row(btn_other_week)
-
-                markup_inline.row(btn_switch_global)
-
-                markup_inline.row(btn_today, btn_auto, btn_menu)
-
-                # Добавляем информацию о неделе
-
-                response += f"\n\n*Отображается I неделя*\n"
-
-                response += f"*Подгруппа:* {user_subgroup}\n"
-
-                response += f"*Режим:* Ручной\n"
-
-                response += f"*Текущая неделя:* {get_current_week()}"
-
-                # Редактируем текущее сообщение
-
-                bot.edit_message_text(
-
-                    response,
-
-                    callback.message.chat.id,
-
-                    callback.message.message_id,
-
-                    reply_markup=markup_inline,
-
-                    parse_mode='Markdown'
-
-                )
-
-                bot.answer_callback_query(callback.id, "Показана I неделя")
-
-            except Exception as e:
-
-                print(f"Ошибка: {e}")
-
-                bot.answer_callback_query(callback.id, "Ошибка обновления")
-
-
-    elif callback.data.startswith('week_II_'):
-
-        # Показать II неделю для конкретного дня
-
-        day_name = callback.data.split('_')[2]
-
-        user_subgroup = get_user_subgroup(user_id)
-
-        if (user_subgroup in schedule and
-
-                day_name in schedule[user_subgroup] and
-
-                "II" in schedule[user_subgroup][day_name]):
-
-            try:
-
-                # Определяем префикс из текущего сообщения
-
-                message_text = callback.message.text
-
-                lines = message_text.split('\n')
-
-                prefix = lines[0]  # Берем первую строку как префикс
-
-                # Формируем новое сообщение с II неделей
-
-                response = f"{prefix}\n\n"
-
-                response += schedule[user_subgroup][day_name]["II"]
-
-                # Обновляем кнопки
-
-                markup_inline = types.InlineKeyboardMarkup(row_width=2)
-
-                btn_other_week = types.InlineKeyboardButton(
-
-                    '📘 I неделя',
-
-                    callback_data=f'week_I_{day_name}'
-
-                )
-
-                btn_switch_global = types.InlineKeyboardButton(
-
-                    '⚙️ Сменить на I',
-
-                    callback_data='switch_global_I'
-
-                )
-
-                btn_today = types.InlineKeyboardButton(
-
-                    '📅 Сегодня',
-
-                    callback_data='show_today'
-
-                )
-
-                btn_auto = types.InlineKeyboardButton(
-
-                    '🤖 Авто',
-
-                    callback_data='switch_auto'
-
-                )
-
-                btn_menu = types.InlineKeyboardButton(
-
-                    '🏠 Меню',
-
-                    callback_data='back_to_menu'
-
-                )
-
-                markup_inline.row(btn_other_week)
-
-                markup_inline.row(btn_switch_global)
-
-                markup_inline.row(btn_today, btn_auto, btn_menu)
-
-                # Добавляем информацию о неделе
-
-                response += f"\n\n*Отображается II неделя*\n"
-
-                response += f"*Подгруппа:* {user_subgroup}\n"
-
-                response += f"*Режим:* Ручной\n"
-
-                response += f"*Текущая неделя:* {get_current_week()}"
-
-                # Редактируем текущее сообщение
-
-                bot.edit_message_text(
-
-                    response,
-
-                    callback.message.chat.id,
-
-                    callback.message.message_id,
-
-                    reply_markup=markup_inline,
-
-                    parse_mode='Markdown'
-
-                )
-
-                bot.answer_callback_query(callback.id, "Показана II неделя")
-
-            except Exception as e:
-
-                print(f"Ошибка: {e}")
-
-                bot.answer_callback_query(callback.id, "Ошибка обновления")
-
-    elif callback.data.startswith('switch_global_'):
-        # Глобальное переключение недели
-        week_to_set = callback.data.split('_')[2]
-        user_selected_weeks[user_id] = week_to_set
-        save_data()
-
-        bot.answer_callback_query(callback.id, f"Установлена {week_to_set} неделя")
-
-        # Закрываем меню и показываем сообщение
-        bot.edit_message_text(
-            f"✅ *Расписание переключено на {week_to_set} неделю!*\n\n"
-            f"Теперь все дни будут показываться для *{week_to_set} недели*.\n"
-            f"Для возврата к автоматическому режиму используйте команду /auto_week",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-    elif callback.data == 'switch_auto':
-        # Включить автоматический режим
-        user_selected_weeks[user_id] = "auto"
-        save_data()
-
-        current_week = get_current_week()
-        bot.answer_callback_query(callback.id, f"Включен автоматический режим. Текущая неделя: {current_week}")
-
-        # Закрываем меню и показываем сообщение
-        bot.edit_message_text(
-            f"✅ *Включен автоматический режим!*\n\n"
-            f"Теперь бот показывает расписание *{current_week} недели* (текущей).",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-    elif callback.data == 'set_week_I':
-        # Установить I неделю
-        user_selected_weeks[user_id] = "I"
-        save_data()
-
-        bot.answer_callback_query(callback.id, "Установлена I неделя")
-
-        # Закрываем меню и показываем сообщение
-        bot.edit_message_text(
-            "✅ *Расписание переключено на I неделю!*\n\n"
-            "Теперь все дни будут показываться для *I недели*.\n"
-            "Для возврата к автоматическому режиму используйте команду /auto_week",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-    elif callback.data == 'set_week_II':
-        # Установить II неделю
-        user_selected_weeks[user_id] = "II"
-        save_data()
-
-        bot.answer_callback_query(callback.id, "Установлена II неделя")
-
-        # Закрываем меню и показываем сообщение
-        bot.edit_message_text(
-            "✅ *Расписание переключено на II неделю!*\n\n"
-            "Теперь все дни будут показываться для *II недели*.\n"
-            "Для возврата к автоматическому режиму используйте команду /auto_week",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-    elif callback.data == 'set_week_auto':
-        # Включить автоматический режим
-        user_selected_weeks[user_id] = "auto"
-        save_data()
-        current_week = get_current_week()
-
-        bot.answer_callback_query(callback.id, f"Включен авторежим. Текущая неделя: {current_week}")
-
-        # Закрываем меню и показываем сообщение
-        bot.edit_message_text(
-            f"✅ *Включен автоматический режим!*\n\n"
-            f"Теперь бот показывает расписание *{current_week} недели* (текущей).",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-    elif callback.data == 'set_week_current':
-        # Установить текущую неделю
-        current_week = get_current_week()
-        user_selected_weeks[user_id] = current_week
-        save_data()
-
-        bot.answer_callback_query(callback.id, f"Установлена {current_week} неделя")
-
-        # Закрываем меню и показываем сообщение
-        bot.edit_message_text(
-            f"✅ *Установлена текущая неделя ({current_week})!*\n\n"
-            f"Теперь бот показывает расписание *{current_week} недели*.",
-            callback.message.chat.id,
-            callback.message.message_id,
-            parse_mode='Markdown'
-        )
-
-    elif callback.data == 'cancel_week_switch':
-        # Отмена смены недели
-        bot.delete_message(callback.message.chat.id, callback.message.message_id)
-        bot.answer_callback_query(callback.id, "Отменено")
-
-    elif callback.data == 'back_to_menu':
-        bot.answer_callback_query(callback.id, "Возврат в меню")
-        try:
-            bot.delete_message(callback.message.chat.id, callback.message.message_id)
-        except:
-            pass
-        # Отправляем обновленное меню
-        msg = bot.send_message(callback.message.chat.id, "🔄 Обновление меню...")
-        start(msg)
-
-    elif callback.data == 'show_today':
-        bot.answer_callback_query(callback.id, "Показываю сегодня")
-        today_command(callback.message)
-
-
-# ================ ЗАПУСК ================
-
-def run_flask_server():
     try:
-        port = int(os.environ.get('PORT', 10000))
-        print(f"🚀 Flask сервер запускается на порту: {port}")
-        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False, threaded=True)
-    except Exception as e:
-        print(f"❌ Ошибка Flask: {e}")
+        sch_text = schedule[user_subgroup][day_name][user_week]
+    except KeyError:
+        bot.send_message(chat_id, f"Расписание на {day_name} не найдено.")
         return
 
+    mode_text = "Ручной" if user_data['weeks'].get(str(chat_id), 'auto') != 'auto' else "Авто"
+    response = f"{prefix}\n\n{sch_text}\n\n*Отображается {user_week} неделя*\n*Подгруппа:* {user_subgroup}\n*Режим:* {mode_text}\n*Текущая неделя:* {get_current_week()}"
+    markup = get_inline_schedule_keyboard(day_name, user_week)
+
+    if hasattr(message_or_call, 'data'): # Если это вызов из callback
+        bot.edit_message_text(response, chat_id, message_or_call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+    else:
+        bot.send_message(chat_id, response, reply_markup=markup, parse_mode='Markdown')
+
+# ================ UNIFIED CALLBACK HANDLER ================
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    user_id_str = str(call.message.chat.id)
+    data = call.data
+
+    if data.startswith('set_sg_'):
+        sg = int(data.split('_')[2])
+        user_data['subgroups'][user_id_str] = sg
+        save_data()
+        bot.edit_message_text(f"✅ *Выбрана Подгруппа {sg}!*", call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+        bot.send_message(call.message.chat.id, "🔄 Меню загружено.", reply_markup=get_main_keyboard())
+
+    elif data.startswith('view_'):
+        # Формат: view_I_Понедельник
+        _, week, day_name = data.split('_')
+        prefix = call.message.text.split('\n')[0] # Забираем префикс из старого сообщения
+        show_day_with_week_buttons(call, day_name, prefix=prefix, force_week=week)
+        bot.answer_callback_query(call.id, f"Показана {week} неделя")
+
+    elif data.startswith('set_week_'):
+        # Формат: set_week_I, set_week_II, set_week_auto
+        target = data.replace('set_week_', '')
+        user_data['weeks'][user_id_str] = target
+        save_data()
+        
+        msg = f"✅ *Режим: {'Автоматический' if target == 'auto' else target + ' неделя'}*"
+        bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+        bot.answer_callback_query(call.id, "Настройки сохранены")
+
+    elif data == 'show_today':
+        show_day_schedule(call.message, "today")
+        bot.answer_callback_query(call.id)
+
+    elif data in ['cancel_action', 'back_to_menu']:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        if data == 'back_to_menu':
+            bot.send_message(call.message.chat.id, "🏠 Главное меню", reply_markup=get_main_keyboard())
+
+# ================ FLASK & ЗАПУСК ================
+
+@app.route('/')
+def home(): return "Bot is running!", 200
+
+@app.route('/ping')
+def ping(): return "pong", 200
+
+def run_flask_server():
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False, threaded=True)
 
 def keep_alive():
-    """
-    Периодически пингует бота, чтобы он не засыпал на Render Free
-    """
     time.sleep(40)
-
-    # Ваш URL с Render
-    YOUR_RENDER_URL = "https://telegram-schedule-bot-y7r4.onrender.com"
-
+    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://telegram-schedule-bot-y7r4.onrender.com")
     while True:
-        try:
-            response = requests.get(f"{YOUR_RENDER_URL}/ping", timeout=10)
-            print(f"✅ Keep-alive ping отправлен: {response.status_code}")
-        except Exception as e:
-            print(f"⚠️ Keep-alive не удался: {e}")
-
+        try: requests.get(f"{RENDER_URL}/ping", timeout=10)
+        except: pass
         time.sleep(480)
 
-
-def run_telegram_bot():
-    print("🤖 Telegram бот запущен!")
-    print(f"📅 Семестр начинается: {START_DATE.strftime('%d.%m.%Y')}")
-    current_week = get_current_week()
-    print(f"📆 Текущая неделя: {current_week}")
-    print(f"🔍 Отладка: Дней от начала семестра: {(datetime.now() - START_DATE).days}")
-    bot.polling(none_stop=True, interval=1, timeout=60)
-
-
 if __name__ == "__main__":
-    print("🎬 ===== НАЧАЛО ЗАПУСКА СИСТЕМЫ =====")
-
-    # Загружаем данные
-    load_data()
-
-    # 1. Запускаем keep-alive в отдельном потоке
-    print("1. Запуск системы keep-alive...")
-    keep_alive_thread = threading.Thread(target=keep_alive)
-    keep_alive_thread.daemon = True
-    keep_alive_thread.start()
-
-    # 2. Запускаем Flask сервер
-    print("2. Запуск Flask сервера...")
-    flask_thread = threading.Thread(target=run_flask_server)
-    flask_thread.daemon = True
-    flask_thread.start()
-
-    # 3. Ждем запуска Flask
-    print("3. Ожидание запуска компонентов (5 секунд)...")
-    time.sleep(5)
-
-    # 4. Запускаем Telegram бота
-    print("4. Запуск Telegram бота...")
-    run_telegram_bot()
-
-    print("🏁 Все системы успешно запущены!")
-
-
+    print("🎬 НАЧАЛО ЗАПУСКА СИСТЕМЫ")
+    threading.Thread(target=keep_alive, daemon=True).start()
+    threading.Thread(target=run_flask_server, daemon=True).start()
+    
+    print("🤖 Запуск Telegram бота (Polling)...")
+    bot.polling(none_stop=True, interval=1, timeout=60)
