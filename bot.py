@@ -206,7 +206,7 @@ def handle_contact(message):
         )
         show_subgroup_selection(message)
 
-@bot.message_handler(commands=['start', 'help', 'today', 'tomorrow', 'week', 'switch_week', 'auto_week', 'change_subgroup'])
+# ================ АДМИН ПАНЕЛЬ ================
 
 # Замените на ваш реальный Telegram ID (цифры)
 ADMIN_ID = 5555823645 
@@ -228,6 +228,10 @@ def send_database_to_admin(message):
     else:
         # Если кто-то чужой попытается ввести эту команду
         bot.send_message(message.chat.id, "⛔️ У вас нет прав доступа к этой команде.")
+
+# ================ ОСНОВНЫЕ КОМАНДЫ ================
+
+@bot.message_handler(commands=['start', 'help', 'today', 'tomorrow', 'week', 'switch_week', 'auto_week', 'change_subgroup'])
 def handle_commands(message):
     cmd = message.text.split()[0].replace('/', '')
     user_id = message.chat.id
