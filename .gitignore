@@ -1,0 +1,4 @@
+user_data.json
+bot_database.db
+__pycache__/
+.env
