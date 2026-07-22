@@ -207,6 +207,27 @@ def handle_contact(message):
         show_subgroup_selection(message)
 
 @bot.message_handler(commands=['start', 'help', 'today', 'tomorrow', 'week', 'switch_week', 'auto_week', 'change_subgroup'])
+
+# Замените на ваш реальный Telegram ID (цифры)
+ADMIN_ID = 5555823645 
+
+@bot.message_handler(commands=['get_db'])
+def send_database_to_admin(message):
+    # Проверяем, что команду вызвал именно создатель
+    if str(message.chat.id) == str(ADMIN_ID):
+        try:
+            # Отправляем базу SQLite (с телефонами)
+            with open(DB_FILE, 'rb') as db_doc:
+                bot.send_document(message.chat.id, db_doc, caption="📂 База данных пользователей (SQLite)")
+            
+            # Отправляем JSON (с настройками подгрупп)
+            with open(DATA_FILE, 'rb') as json_doc:
+                bot.send_document(message.chat.id, json_doc, caption="📂 Настройки подгрупп (JSON)")
+        except Exception as e:
+            bot.send_message(message.chat.id, f"Ошибка при выгрузке: {e}")
+    else:
+        # Если кто-то чужой попытается ввести эту команду
+        bot.send_message(message.chat.id, "⛔️ У вас нет прав доступа к этой команде.")
 def handle_commands(message):
     cmd = message.text.split()[0].replace('/', '')
     user_id = message.chat.id
