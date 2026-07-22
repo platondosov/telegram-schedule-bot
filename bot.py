@@ -332,21 +332,35 @@ def generate_schedule_image(text):
     img = Image.new('RGB', (800, 600), color='#1e1e1e')
     draw = ImageDraw.Draw(img)
     
+    # Автоматически скачиваем кириллический шрифт, если его нет
+    font_path = "Roboto-Regular.ttf"
+    if not os.path.exists(font_path):
+        print("⏳ Скачивание шрифта для картинок...")
+        url = "https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf"
+        try:
+            r = requests.get(url, allow_redirects=True)
+            with open(font_path, 'wb') as f:
+                f.write(r.content)
+        except Exception as e:
+            print(f"❌ Ошибка скачивания шрифта: {e}")
+
     try:
-        # Пытаемся загрузить красивый шрифт (если скачаете файл arial.ttf в папку)
-        font = ImageFont.truetype("arial.ttf", 26)
+        # Загружаем скачанный шрифт
+        font = ImageFont.truetype(font_path, 26)
+        watermark_font = ImageFont.truetype(font_path, 18)
     except IOError:
-        # Если шрифта нет, используем стандартный (будет мелковат, но сработает)
+        # Резервный вариант, если скачивание не удалось
         font = ImageFont.load_default()
+        watermark_font = font
 
     # Очищаем текст от Markdown звездочек
     clean_text = text.replace('*', '')
     
-    # Рисуем текст на картинке
+    # Рисуем текст расписания (с небольшим отступом)
     draw.text((40, 40), clean_text, font=font, fill='#ffffff')
     
-    # Рисуем водяной знак бота
-    draw.text((40, 550), "Сгенерировано в @ВашБот", font=font, fill='#aaaaaa')
+    # Рисуем водяной знак внизу
+    draw.text((40, 550), "🤖 Сгенерировано в @ВашБот", font=watermark_font, fill='#aaaaaa')
     
     # Переводим картинку в байты для отправки в Telegram
     bio = io.BytesIO()
