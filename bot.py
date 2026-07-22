@@ -335,4 +335,5 @@ if __name__ == "__main__":
     threading.Thread(target=run_flask_server, daemon=True).start()
     
     print("🤖 Запуск Telegram бота (Polling)...")
+    bot.remove_webhook()
     bot.polling(none_stop=True, interval=1, timeout=60)
